@@ -133,8 +133,7 @@ class MainWindow(QMainWindow):
         self.upd_small = _btn("", self.open_updates, "icon", "Обновления программы", ic="update")
         self.lnk_btn = _btn("", self.make_shortcut, "icon", "Ярлык на рабочий стол и в меню «Пуск»", ic="monitor")
         for b in (self.lnk_btn, self.theme_btn, self.upd_small):
-            b.setFixedSize(32, 32)
-            head.addWidget(b)
+            b.setFixedSize(34, 34)
         lay.addLayout(head)
 
         card = QFrame(objectName="card")
@@ -178,6 +177,19 @@ class MainWindow(QMainWindow):
             ("restore", "Восстановить из бэкапа", self.restore_backup, "Вернуть списки и маршруты из файла бэкапа"),
         ]:
             lay.addWidget(_btn(text, fn, "nav", tip, ic=ic))
+        # служебное — внизу панели, как в Termius / VS Code
+        foot = QFrame(objectName="footer")
+        fh = QHBoxLayout(foot)
+        fh.setContentsMargins(0, 8, 0, 0)
+        fh.setSpacing(4)
+        for b in (self.lnk_btn, self.theme_btn, self.upd_small):
+            fh.addWidget(b)
+        fh.addStretch(1)
+        from .. import __version__
+        ver = _label(f"v{__version__}", "muted")
+        ver.setToolTip("Версия программы")
+        fh.addWidget(ver)
+        lay.addWidget(foot)
         return w
 
     def _main(self) -> QWidget:
@@ -195,28 +207,34 @@ class MainWindow(QMainWindow):
         tl.addWidget(self.subtitle)
         lay.addLayout(tl)
 
-        tools = QWidget()
-        fl = FlowLayout(tools)
         self.search = QLineEdit(placeholderText="Поиск по спискам и доменам")
         lead_icon(self.search, "search")
-        self.search.setMinimumWidth(240)
+        self.search.setMinimumWidth(160)
         self.search.textChanged.connect(self._apply_filter)
         self.chk_all = QCheckBox("Выбрать все")
         self.chk_all.setCursor(Qt.PointingHandCursor)
         self.chk_all.clicked.connect(self._check_all)
-        self.check = QLineEdit(placeholderText="Проверить домен: куда пойдёт?")
+        self.check = QLineEdit(placeholderText="Проверить домен — куда пойдёт")
         lead_icon(self.check, "compass")
-        self.check.setMinimumWidth(220)
+        self.check.setMinimumWidth(160)
+        self.check.setToolTip("Введите домен и нажмите Enter")
         self.check.returnPressed.connect(lambda: self.check_domain(self.check.text()))
+        # строка 1 — действия со списками, строка 2 — поиск и проверка
+        tools = QWidget()
+        fl = FlowLayout(tools)
         for wd in (_btn("Каталог", self.open_catalog, "primary", "Добавить сервисы из шаблонов и базы доменов",
                         ic="catalog"),
                    _btn("Новый список", self.new_group, ic="plus"),
                    _btn("Разбить большие", self.split_big, tip="Разделить списки, превышающие лимит доменов",
                         ic="split"),
-                   self.search, self.check,
                    _btn("Обновить", self.refresh, tip="Перечитать роутер", ic="refresh")):
             fl.addWidget(wd)
         lay.addWidget(tools)
+        finder = QHBoxLayout()
+        finder.setSpacing(8)
+        finder.addWidget(self.search, 3)
+        finder.addWidget(self.check, 2)
+        lay.addLayout(finder)
         sel = QHBoxLayout()
         sel.setContentsMargins(4, 4, 0, 0)
         sel.addWidget(self.chk_all)

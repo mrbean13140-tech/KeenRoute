@@ -45,13 +45,30 @@ def is_dark() -> bool:
     return C["bg"] == DARK["bg"]
 
 
+CHECK_PNG = ""
+
+
+def _make_check_png() -> str:
+    """Белая птичка для отмеченных галочек (QSS берёт картинку только из файла)."""
+    import tempfile
+
+    from .icons import icon
+    path = Path(tempfile.gettempdir()) / "keenroute_check.png"
+    try:
+        icon("check", "#ffffff", 16).pixmap(16, 16).save(str(path))
+        return path.as_posix()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _qss(C) -> str:
     return f"""
 * {{ font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; font-size: 10pt; color: {C['text']}; }}
 QMainWindow, QDialog, QWidget#central {{ background: {C['bg']}; }}
 QWidget#sidebar {{ background: {C['side']}; border-right: 1px solid {C['border']}; }}
 QLabel#title {{ font-size: 16pt; font-weight: 600; }}
-QLabel#brand {{ font-size: 12.5pt; font-weight: 700; }}
+QLabel#brand {{ font-size: 13pt; font-weight: 700; }}
+QFrame#footer {{ border-top: 1px solid {C['border']}; }}
 QLabel#h2 {{ font-size: 11pt; font-weight: 600; }}
 QLabel#muted, QLabel#caption {{ color: {C['muted']}; }}
 QLabel#caption {{ font-size: 8.5pt; font-weight: 600; letter-spacing: 1px; }}
@@ -113,13 +130,15 @@ QListWidget::item:hover {{ background: {C['card']}; }}
 QListWidget::item:selected {{ background: {C['card2']}; color: {C['text']}; border-left: 3px solid {C['accent']}; }}
 
 QCheckBox {{ spacing: 8px; }}
-QCheckBox::indicator, QTableWidget::indicator {{
+QCheckBox::indicator, QTableWidget::indicator, QListWidget::indicator, QTreeWidget::indicator {{
     width: 16px; height: 16px; border-radius: 4px; border: 1px solid {C['muted']}; background: transparent;
 }}
-QCheckBox::indicator:checked, QTableWidget::indicator:checked {{
+QCheckBox::indicator:checked, QTableWidget::indicator:checked, QListWidget::indicator:checked,
+QTreeWidget::indicator:checked {{ image: url({CHECK_PNG});
     background: {C['accent']}; border: 1px solid {C['accent']};
 }}
-QCheckBox::indicator:hover, QTableWidget::indicator:hover {{ border: 1px solid {C['accent']}; }}
+QTreeWidget::indicator:indeterminate {{ background: {C['muted']}; border: 1px solid {C['muted']}; }}
+QCheckBox::indicator:hover, QTableWidget::indicator:hover, QListWidget::indicator:hover, QTreeWidget::indicator:hover {{ border: 1px solid {C['accent']}; }}
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {C['border']}; border-radius: 4px; min-height: 30px; }}
@@ -170,6 +189,9 @@ def apply(app: QApplication, mode: str = "auto") -> None:
     f = QFont("Segoe UI Variable Text")
     f.setPointSize(10)
     app.setFont(f)
+    global CHECK_PNG
+    if not CHECK_PNG:
+        CHECK_PNG = _make_check_png()
     app.setStyleSheet(_qss(C))
 
 
