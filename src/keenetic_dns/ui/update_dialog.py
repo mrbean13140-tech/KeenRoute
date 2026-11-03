@@ -1,7 +1,7 @@
 """Окно «Обновления программы»."""
 from __future__ import annotations
 
-from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QHBoxLayout, QLabel, QMessageBox,
                                QProgressBar, QPushButton, QVBoxLayout)
 
 from .. import __version__
@@ -34,12 +34,6 @@ class UpdateDialog(QDialog):
         self.auto = QCheckBox("Проверять обновления при запуске")
         self.auto.setChecked(self.cfg.get("check_updates", True))
         lay.addWidget(self.auto)
-        lay.addWidget(QLabel("Токен GitHub (не нужен — репозиторий публичный; укажите, только если GitHub ограничивает запросы):",
-                             objectName="muted", wordWrap=True))
-        self.token = QLineEdit(S.get_token())
-        self.token.setEchoMode(QLineEdit.Password)
-        self.token.setPlaceholderText("github_pat_…")
-        lay.addWidget(self.token)
         lay.addStretch(1)
         row = QHBoxLayout()
         self.b_check = QPushButton("Проверить")
@@ -50,10 +44,6 @@ class UpdateDialog(QDialog):
         close = QPushButton("Закрыть")
         close.clicked.connect(self.accept)
         row.addWidget(self.b_check)
-        self.b_lnk = QPushButton("Ярлык на рабочий стол")
-        self.b_lnk.setToolTip("Установить в постоянную папку и создать ярлыки на рабочем столе и в меню «Пуск»")
-        self.b_lnk.clicked.connect(self.make_shortcut)
-        row.addWidget(self.b_lnk)
         row.addStretch(1)
         row.addWidget(close)
         row.addWidget(self.b_install)
@@ -68,13 +58,12 @@ class UpdateDialog(QDialog):
     def _save(self, *_):
         self.cfg["check_updates"] = self.auto.isChecked()
         S.save(self.cfg)
-        S.set_token(self.token.text().strip())
 
     def check(self):
         self._save()
         self.state.setText("Проверяю…")
         self.b_check.setEnabled(False)
-        run_quiet(U.check, self._show, self._fail, self.token.text().strip() or None)
+        run_quiet(U.check, self._show, self._fail, None)
 
     def _fail(self, msg):
         self.b_check.setEnabled(True)
@@ -92,23 +81,6 @@ class UpdateDialog(QDialog):
         else:
             self.state.setText(f"У вас последняя версия ({rel.version}).")
 
-    def make_shortcut(self):
-        from ..core import install as I
-        if not I.current_exe():
-            return QMessageBox.information(self, "Ярлык", "Доступно только при запуске из exe.")
-        try:
-            if I.is_installed():
-                I.create_shortcuts(I.installed_exe())
-                return QMessageBox.information(self, "Ярлык", "Ярлыки созданы на рабочем столе и в меню «Пуск».")
-            exe = I.install()
-        except Exception as e:  # noqa: BLE001
-            return QMessageBox.warning(self, "Ярлык", f"Не получилось: {e}")
-        if QMessageBox.question(self, "Установлено",
-                                f"KeenRoute установлен в {exe.parent}, ярлыки созданы.\n"
-                                "Перезапустить из новой папки сейчас?") == QMessageBox.Yes:
-            I.launch(exe)
-            QApplication.quit()
-
     def install(self):
         if not U.can_self_update():
             return QMessageBox.information(self, "Обновление",
@@ -116,7 +88,7 @@ class UpdateDialog(QDialog):
         self.b_install.setEnabled(False)
         self.bar.setVisible(True)
         self.state.setText(f"Скачиваю {self.rel.version}…")
-        run_quiet(U.download, self._downloaded, self._fail, self.rel, self.token.text().strip() or None)
+        run_quiet(U.download, self._downloaded, self._fail, self.rel, None)
 
     def _downloaded(self, path):
         self.bar.setValue(100)

@@ -116,6 +116,12 @@ QScrollBar::handle:vertical:hover {{ background: {C['muted']}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollBar:horizontal {{ height: 0; }}
 
+QTabWidget::pane {{ border: none; }}
+QTabBar {{ background: {C['bg']}; }}
+QTabBar::tab {{ background: transparent; color: {C['muted']}; padding: 10px 18px; border: none;
+               border-bottom: 2px solid transparent; font-weight: 600; }}
+QTabBar::tab:hover {{ color: {C['text']}; }}
+QTabBar::tab:selected {{ color: {C['text']}; border-bottom: 2px solid {C['accent']}; }}
 QSplitter::handle {{ background: {C['border']}; width: 1px; }}
 QStatusBar {{ background: {C['side']}; color: {C['muted']}; border-top: 1px solid {C['border']}; }}
 QToolTip {{ background: {C['card']}; color: {C['text']}; border: 1px solid {C['border']}; padding: 4px; }}

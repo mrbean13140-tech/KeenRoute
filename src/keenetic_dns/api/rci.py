@@ -38,6 +38,7 @@ class RCIClient:
 
     # --- авторизация ---
     def login(self, login: str, password: str) -> None:
+        self._cred = (login, password)  # для автоматического повторного входа, когда роутер сбросит сессию
         try:
             r = self.s.get(f"{self.base}/auth", timeout=self.timeout)
         except requests.RequestException as e:
@@ -58,8 +59,19 @@ class RCIClient:
         log.info("Авторизация на %s успешна", self.base)
 
     # --- запросы ---
+    def _relogin(self) -> bool:
+        cred = getattr(self, "_cred", None)
+        if not cred:
+            return False
+        log.info("Сессия истекла — вхожу заново")
+        self.s.cookies.clear()
+        self.login(*cred)
+        return True
+
     def get(self, path: str) -> Any:
         r = self.s.get(f"{self.base}/rci/{path.strip('/')}", timeout=self.timeout)
+        if r.status_code == 401 and self._relogin():
+            r = self.s.get(f"{self.base}/rci/{path.strip('/')}", timeout=self.timeout)
         if r.status_code == 401:
             raise AuthError("Сессия истекла, войдите заново")
         r.raise_for_status()
@@ -69,11 +81,12 @@ class RCIClient:
         """Выполняет пакет CLI-команд. Бросает RCIError при ошибке любой из них."""
         if not commands:
             return []
-        r = self.s.post(
-            f"{self.base}/rci/",
-            json=[{"parse": c} for c in commands],
-            timeout=max(self.timeout, 5 + len(commands) * 0.2),
-        )
+        def post():
+            return self.s.post(f"{self.base}/rci/", json=[{"parse": c} for c in commands],
+                               timeout=max(self.timeout, 5 + len(commands) * 0.2))
+        r = post()
+        if r.status_code == 401 and self._relogin():
+            r = post()
         if r.status_code == 401:
             raise AuthError("Сессия истекла, войдите заново")
         r.raise_for_status()

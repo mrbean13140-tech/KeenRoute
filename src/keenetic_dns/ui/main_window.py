@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                                QFileDialog, QFrame, QHBoxLayout, QHeaderView, QInputDialog, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
-                               QPlainTextEdit, QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout,
+                               QPlainTextEdit, QPushButton, QSplitter, QTableWidget, QTabWidget, QTableWidgetItem, QVBoxLayout,
                                QWidget)
 
 from ..api.rci import RCIClient
@@ -83,12 +83,30 @@ class MainWindow(QMainWindow):
         split.setChildrenCollapsible(False)
         split.setHandleWidth(1)
         split.addWidget(self._sidebar())
-        split.addWidget(self._main())
-        split.addWidget(self._editor_panel())
+        # вкладки: маршрутизация DNS (списки) и DoT / DoH
+        routing = QSplitter(Qt.Horizontal)
+        routing.setChildrenCollapsible(False)
+        routing.setHandleWidth(1)
+        routing.addWidget(self._main())
+        routing.addWidget(self._editor_panel())
+        routing.setStretchFactor(0, 1)
+        routing.setStretchFactor(1, 0)
+        routing.setSizes([760, 300])
+        from .dns_dialog import DnsPanel
+        try:
+            providers = D.load_providers()
+        except Exception:  # noqa: BLE001
+            log.exception("Шаблоны DNS не загрузились")
+            providers = []
+        self.dns_panel = DnsPanel(self, providers, self.apply_dns)
+        self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+        self.tabs.addTab(routing, "Маршрутизация DNS")
+        self.tabs.addTab(self.dns_panel, "DoT / DoH")
+        split.addWidget(self.tabs)
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
-        split.setStretchFactor(2, 0)
-        split.setSizes([250, 760, 300])
+        split.setSizes([250, 1060])
         self.setCentralWidget(split)
         self.statusBar().showMessage("Готово")
 
@@ -132,7 +150,7 @@ class MainWindow(QMainWindow):
         self.upd_btn.setVisible(False)
         lay.addWidget(self.upd_btn)
         lay.addSpacing(4)
-        lay.addWidget(_label("СПИСКИ ПО ШЛЮЗАМ", "caption"))
+        lay.addWidget(_label("МАРШРУТИЗАЦИЯ DNS", "caption"))
         self.iflist = GatewayList(None)  # источник drag — таблица, задаётся после её создания
         self.iflist.dropped.connect(self._on_drop)
         self.iflist.setToolTip("Перетащите сюда строки таблицы — списки переедут на этот шлюз")
@@ -147,9 +165,8 @@ class MainWindow(QMainWindow):
             ("📚   Каталог сервисов", self.open_catalog, "Шаблоны и поиск по базе доменов"),
             ("⟳   Проверить обновления базы", self.check_db_updates,
              "Скачать свежую базу доменов и показать, что добавится в списки из каталога"),
-            ("🛡   DNS / DoT / DoH", self.open_dns, "DNS-серверы роутера: шаблоны Cloudflare, Google, AdGuard, Яндекс…"),
             ("⭳   Импорт из файла", self.import_dialog, "Загрузить списки из .json или .txt"),
-            ("⭱   Экспорт", self.export_dialog, "Сохранить отмеченные (или все) списки в файл"),
+            ("⭱   Экспорт в файл", self.export_dialog, "Сохранить отмеченные (или все) списки в файл"),
             ("💾   Создать бэкап", self.make_backup, "Сохранить конфигурацию роутера в файл"),
             ("↺   Восстановить из бэкапа", self.restore_backup, "Вернуть списки и маршруты из файла бэкапа"),
         ]:
@@ -311,6 +328,7 @@ class MainWindow(QMainWindow):
         checked = {g.name for g in self.checked()}
         self.config_lines, self.groups, self.ifaces = res
         self.dns = D.parse_dns(self.config_lines)
+        self.dns_panel.set_current(self.dns)
         self._filling = True
         self.table.setRowCount(0)
         for g in sorted(self.groups.values(), key=lambda x: x.title.lower()):
@@ -744,14 +762,7 @@ class MainWindow(QMainWindow):
 
     # ---------- DNS ----------
     def open_dns(self):
-        from .dns_dialog import DnsDialog
-        try:
-            providers = D.load_providers()
-        except Exception as e:  # noqa: BLE001
-            return QMessageBox.critical(self, "DNS", f"Не загрузились шаблоны DNS: {e}")
-        dlg = DnsDialog(self, getattr(self, "dns", []), providers)
-        if dlg.exec() == QDialog.Accepted:
-            self.apply_dns(dlg.add, dlg.remove)
+        self.tabs.setCurrentWidget(self.dns_panel)
 
     def apply_dns(self, add: list[D.Upstream], remove: list[D.Upstream]):
         cmds = D.plan_dns(getattr(self, "dns", []), add, remove)

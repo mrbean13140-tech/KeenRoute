@@ -1,32 +1,27 @@
-"""Окно DNS: текущие серверы роутера + шаблоны провайдеров (обычный DNS / DoT / DoH)."""
+"""Вкладка DNS: текущие серверы роутера + шаблоны провайдеров (обычный DNS / DoT / DoH)."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
+from PySide6.QtWidgets import (QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
                                QScrollArea, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..core import dns as D
 from ..core.model import normalize_entry
 from .theme import C as COL
-from .theme import app_icon, dark_titlebar
 
 
-class DnsDialog(QDialog):
-    """После accept(): self.add, self.remove — списки Upstream."""
+class DnsPanel(QWidget):
+    """Вкладка «DNS / DoT / DoH». «Применить» вызывает on_apply(add, remove)."""
 
-    def __init__(self, parent, current: list[D.Upstream], providers: list[dict]):
+    def __init__(self, parent, providers: list[dict], on_apply):
         super().__init__(parent)
-        self.setWindowTitle("DNS-серверы роутера")
-        self.setWindowIcon(app_icon())
-        self.resize(1000, 620)
-        self.setMinimumSize(720, 460)
-        self.current, self.providers = current, providers
+        self.current: list[D.Upstream] = []
+        self.providers, self.on_apply = providers, on_apply
         self.add: list[D.Upstream] = []
         self.remove: list[D.Upstream] = []
         self.boxes: list[tuple[dict, str, QCheckBox]] = []
         self._build()
-        dark_titlebar(self)
 
     def _build(self):
         root = QHBoxLayout(self)
@@ -39,36 +34,11 @@ class DnsDialog(QDialog):
         ll = QVBoxLayout(left)
         ll.setContentsMargins(14, 16, 14, 12)
         ll.setSpacing(8)
-        ll.addWidget(QLabel("Сейчас на роутере", objectName="title"))
+        ll.addWidget(QLabel("Сейчас на роутере", objectName="h2"))
         ll.addWidget(QLabel("Снимите галочку или выделите и нажмите «Удалить». Раскройте сервер, "
                             "чтобы увидеть домены.", objectName="muted", wordWrap=True))
         self.cur = QTreeWidget()
         self.cur.setHeaderHidden(True)
-        groups: dict = {}
-        for u in self.current:
-            key = D.server_key(u) + ((u.iface,) if u.kind == "plain" else ())
-            groups.setdefault(key, []).append(u)
-        kinds = {"plain": "DNS", "dot": "DoT", "doh": "DoH"}
-        for key, ups in groups.items():
-            u0 = ups[0]
-            name = D.provider_name(u0, self.providers)
-            server = (u0.sni or u0.addr) if u0.kind == "dot" else u0.addr
-            via = f"  через {u0.iface}" if u0.iface else ""
-            doms = [u.domain for u in ups if u.domain]
-            scope = "для всех запросов" if any(not u.domain for u in ups) else f"доменов: {len(doms)}"
-            top = QTreeWidgetItem([f"{kinds[u0.kind]} · {name + ' — ' if name else ''}{server}{via}   ({scope})"])
-            top.setFlags(top.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
-            top.setCheckState(0, Qt.Checked)
-            top.setToolTip(0, server)
-            self.cur.addTopLevelItem(top)
-            for u in ups:
-                ch = QTreeWidgetItem([u.domain or "все запросы"])
-                ch.setFlags(ch.flags() | Qt.ItemIsUserCheckable)
-                ch.setCheckState(0, Qt.Checked)
-                ch.setData(0, Qt.UserRole, u)
-                top.addChild(ch)
-        if not self.current:
-            self.cur.addTopLevelItem(QTreeWidgetItem(["Свои DNS не заданы — используются DNS провайдера"]))
         self.cur.itemChanged.connect(self._mark)
         self.cur.currentItemChanged.connect(self._details)
         ll.addWidget(self.cur, 1)
@@ -89,7 +59,7 @@ class DnsDialog(QDialog):
         rl = QVBoxLayout(right)
         rl.setContentsMargins(20, 16, 20, 14)
         rl.setSpacing(10)
-        rl.addWidget(QLabel("Добавить из шаблонов", objectName="title"))
+        rl.addWidget(QLabel("Добавить из шаблонов", objectName="h2"))
         rl.addWidget(QLabel("DoT и DoH шифруют DNS-запросы — провайдер их не видит и не подменяет. "
                             "Обычный DNS — без шифрования.", objectName="muted", wordWrap=True))
         area = QScrollArea()
@@ -131,8 +101,8 @@ class DnsDialog(QDialog):
 
         btns = QHBoxLayout()
         btns.addStretch(1)
-        cancel = QPushButton("Отмена")
-        cancel.clicked.connect(self.reject)
+        cancel = QPushButton("Сбросить")
+        cancel.clicked.connect(self.reset)
         ok = QPushButton("Применить", objectName="primary")
         ok.clicked.connect(self._accept)
         btns.addWidget(cancel)
@@ -141,6 +111,46 @@ class DnsDialog(QDialog):
         split.addWidget(right)
         split.setSizes([440, 560])
         self._update_limit()
+
+    def set_current(self, current: list[D.Upstream]):
+        """Перерисовать «Сейчас на роутере» (после чтения конфига)."""
+        self.current = list(current)
+        self.cur.blockSignals(True)
+        self.cur.clear()
+        groups: dict = {}
+        for u in self.current:
+            key = D.server_key(u) + ((u.iface,) if u.kind == "plain" else ())
+            groups.setdefault(key, []).append(u)
+        kinds = {"plain": "DNS", "dot": "DoT", "doh": "DoH"}
+        for key, ups in groups.items():
+            u0 = ups[0]
+            name = D.provider_name(u0, self.providers)
+            server = (u0.sni or u0.addr) if u0.kind == "dot" else u0.addr
+            via = f"  через {u0.iface}" if u0.iface else ""
+            doms = [u.domain for u in ups if u.domain]
+            scope = "для всех запросов" if any(not u.domain for u in ups) else f"доменов: {len(doms)}"
+            top = QTreeWidgetItem([f"{kinds[u0.kind]} · {name + ' — ' if name else ''}{server}{via}   ({scope})"])
+            top.setFlags(top.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
+            top.setCheckState(0, Qt.Checked)
+            top.setToolTip(0, server)
+            self.cur.addTopLevelItem(top)
+            for u in ups:
+                ch = QTreeWidgetItem([u.domain or "все запросы"])
+                ch.setFlags(ch.flags() | Qt.ItemIsUserCheckable)
+                ch.setCheckState(0, Qt.Checked)
+                ch.setData(0, Qt.UserRole, u)
+                top.addChild(ch)
+        if not self.current:
+            self.cur.addTopLevelItem(QTreeWidgetItem(["Свои DNS не заданы — используются DNS провайдера"]))
+        self.cur.blockSignals(False)
+        self.info.setText("")
+        self._update_limit()
+
+    def reset(self):
+        for _, _, cb in self.boxes:
+            cb.setChecked(False)
+        self.domains.clear()
+        self.set_current(self.current)
 
     def _leaves(self):
         for i in range(self.cur.topLevelItemCount()):
@@ -205,4 +215,5 @@ class DnsDialog(QDialog):
                                        f"Keenetic поддерживает не более {D.MAX_ENCRYPTED} серверов DoT/DoH.\n"
                                        "Снимите лишние галочки в шаблонах или удалите старые серверы слева.")
         self.add, self.remove = self._planned()
-        self.accept()
+        if self.add or self.remove:
+            self.on_apply(self.add, self.remove)

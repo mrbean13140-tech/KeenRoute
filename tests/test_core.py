@@ -111,6 +111,7 @@ class R:
 class FakeSession:
     def __init__(self, gets, posts):
         self.gets, self.posts, self.sent = list(gets), list(posts), []
+        self.cookies = type("J", (), {"clear": lambda self: None})()
     def get(self, url, **kw): return self.gets.pop(0)
     def post(self, url, json=None, **kw):
         self.sent.append(json); return self.posts.pop(0)
@@ -189,3 +190,10 @@ def test_describe():
     s = C.describe(cur, t)
     assert any(x.startswith("− Удалить «chatgpt»") for x in s)
     assert any(x.startswith("~ «YT»") and "+1 −1 доменов" in x and "Wireguard0 → Wireguard1" in x for x in s)
+
+
+def test_relogin_on_expired_session():
+    c = RCIClient("r")
+    c.s = FakeSession([R(401, CH), R(401), R(401, CH), R(js={"message": ["ok"]})], [R(200), R(200)])
+    c.login("admin", "pass")
+    assert c.running_config() == ["ok"]  # 401 → повторный вход → повтор запроса

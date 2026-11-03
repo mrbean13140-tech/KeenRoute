@@ -225,15 +225,14 @@ def test_catalog_dialog_and_db_update(app, tmp_path):
 
 def test_dns_dialog(app):
     from keenetic_dns.core import dns as D
-    from keenetic_dns.ui.dns_dialog import DnsDialog
     from .test_dns import CFG as DNS_CFG
     fake = FakeRouter(CFG + DNS_CFG, IFACES)
     w = mw.MainWindow(fake, {"model": "KN-1010", "title": "4.2"}, {"name": "Дом"})
     _wait(app)
     assert len(w.dns) == 5
-    providers = D.load_providers(str(Path(__file__).resolve().parent.parent / "assets" / "dns.json"))
-    d = DnsDialog(w, w.dns, providers)
-    d.show()
+    d = w.dns_panel
+    w.open_dns()
+    assert w.tabs.currentWidget() is d and d.cur.topLevelItemCount() >= 4
     for p, kind, cb in d.boxes:
         if p["id"] == "adguard-family" and kind == "dot":
             cb.setChecked(True)
@@ -242,10 +241,9 @@ def test_dns_dialog(app):
     d._remove_selected()  # убрать 8.8.8.8
     assert leaf.font(0).strikeOut()
     assert "из 8" in d.limit.text()
-    _shot(d, "dns.png")
-    d._accept()
+    _shot(w, "dns.png")
+    d._accept()  # «Применить» → w.apply_dns
     assert [u.sni for u in d.add] == ["family.adguard-dns.com"] and d.remove[0].addr == "8.8.8.8"
-    w.apply_dns(d.add, d.remove)
     _wait(app)
     assert w.last_apply["ok"]
     assert D.Upstream("dot", "94.140.14.15", "family.adguard-dns.com") in fake.dns
@@ -288,12 +286,14 @@ def test_design_features(app, tmp_path):
 
 def test_dns_limit(app):
     from keenetic_dns.core import dns as D
-    from keenetic_dns.ui.dns_dialog import DnsDialog
+    from keenetic_dns.ui.dns_dialog import DnsPanel
     providers = D.load_providers(str(Path(__file__).resolve().parent.parent / "assets" / "dns.json"))
-    d = DnsDialog(None, [], providers)
+    applied = []
+    d = DnsPanel(None, providers, lambda a, r: applied.append((a, r)))
+    d.set_current([])
     for p, kind, cb in d.boxes:
         if kind in ("dot", "doh"):
             cb.setChecked(True)  # 7 провайдеров × 2 = 14 > 8
     assert d._update_limit() == 14 and "14 из 8" in d.limit.text()
     d._accept()
-    assert d.add == []  # не принято из-за лимита
+    assert applied == []  # не применено из-за лимита
