@@ -108,7 +108,8 @@ class MainWindow(QMainWindow):
         self.theme_btn = _btn("", self.toggle_theme, "icon")
         self._theme_tip(S.load().get("theme", "auto"))
         self.upd_small = _btn("⬆", self.open_updates, "icon", "Обновления программы")
-        for b in (self.theme_btn, self.upd_small):
+        self.lnk_btn = _btn("🖥", self.make_shortcut, "icon", "Ярлык на рабочий стол и в меню «Пуск»")
+        for b in (self.lnk_btn, self.theme_btn, self.upd_small):
             b.setFixedSize(32, 32)
             head.addWidget(b)
         lay.addLayout(head)
@@ -717,6 +718,25 @@ class MainWindow(QMainWindow):
                 self.upd_btn.setVisible(True)
         from .common import run_quiet
         run_quiet(U.check, done, lambda m: log.info("Проверка обновлений: %s", m), S.get_token() or None)
+
+    def make_shortcut(self):
+        from PySide6.QtWidgets import QApplication
+
+        from ..core import install as I
+        if not I.current_exe():
+            return Toast(self, "Ярлык можно создать только из KeenRoute.exe", kind="info")
+        try:
+            if I.is_installed():
+                I.create_shortcuts(I.installed_exe())
+                return Toast(self, "✓ Ярлыки созданы на рабочем столе и в меню «Пуск»")
+            exe = I.install()
+        except Exception as e:  # noqa: BLE001
+            return Toast(self, f"Не удалось создать ярлык: {e}", kind="bad", ms=10000)
+        if QMessageBox.question(self, "Ярлык создан",
+                                f"KeenRoute установлен в {exe.parent},\nярлыки — на рабочем столе и в меню «Пуск».\n\n"
+                                "Перезапустить из новой папки сейчас?") == QMessageBox.Yes:
+            I.launch(exe)
+            QApplication.quit()
 
     def open_updates(self):
         from .update_dialog import UpdateDialog
