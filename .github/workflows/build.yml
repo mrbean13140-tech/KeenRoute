@@ -41,21 +41,27 @@ jobs:
         run: echo "__version__ = \"0.5.${{ github.run_number }}\"" > src/keenetic_dns/__init__.py
       - name: Build exe
         run: pyinstaller --noconfirm --onefile --windowed --name KeenRoute --icon assets/icon.ico --add-data "assets;assets" --paths src run.py
-      - name: Copy for old versions updater
-        shell: bash
-        run: cp dist/KeenRoute.exe dist/KeeneticDNS.exe
       - uses: actions/upload-artifact@v4
         with:
           name: KeenRoute
           path: dist/KeenRoute.exe
+      - name: Release notes
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          {
+            echo "## $(git log -1 --format=%s)"
+            echo
+            git log -1 --format=%b | grep -v -E '^(Co-Authored-By|Claude-Session):' || true
+            echo
+            echo "Скачайте **KeenRoute.exe** ниже и запустите — установка не нужна."
+          } > release_notes.md
       - name: Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.5.${{ github.run_number }}
           name: KeenRoute 0.5.${{ github.run_number }}
-          body: ${{ github.event.head_commit.message }}
-          files: |
-            dist/KeenRoute.exe
-            dist/KeeneticDNS.exe
+          body_path: release_notes.md
+          files: dist/KeenRoute.exe
           make_latest: true
