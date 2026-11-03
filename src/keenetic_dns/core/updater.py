@@ -130,4 +130,5 @@ def install_and_restart(new_exe: Path) -> None:
             os.replace(old, cur)  # вернуть как было
             raise
     log.info("Обновление: файл заменён, запускаю новую версию")
-    subprocess.Popen([str(cur)], cwd=str(cur.parent), creationflags=0x00000008, close_fds=True)
+    from .install import clean_env
+    subprocess.Popen([str(cur)], cwd=str(cur.parent), env=clean_env(), creationflags=0x00000008, close_fds=True)

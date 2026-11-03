@@ -116,12 +116,14 @@ QScrollBar::handle:vertical:hover {{ background: {C['muted']}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollBar:horizontal {{ height: 0; }}
 
-QTabWidget::pane {{ border: none; }}
-QTabBar {{ background: {C['bg']}; }}
-QTabBar::tab {{ background: transparent; color: {C['muted']}; padding: 10px 18px; border: none;
-               border-bottom: 2px solid transparent; font-weight: 600; }}
-QTabBar::tab:hover {{ color: {C['text']}; }}
-QTabBar::tab:selected {{ color: {C['text']}; border-bottom: 2px solid {C['accent']}; }}
+QTabWidget::pane {{ border: none; border-top: 1px solid {C['border']}; }}
+QTabWidget#pages::tab-bar {{ left: 18px; }}
+QTabBar {{ background: transparent; qproperty-drawBase: 0; }}
+QTabBar::tab {{ background: transparent; color: {C['muted']}; padding: 7px 16px; margin: 12px 6px 10px 0;
+               border: 1px solid transparent; border-radius: 9px; font-weight: 600; }}
+QTabBar::tab:hover {{ color: {C['text']}; background: {C['card']}; }}
+QTabBar::tab:selected {{ color: {C['text']}; background: {C['card2']}; border: 1px solid {C['border']};
+                        border-bottom: 2px solid {C['accent']}; }}
 QSplitter::handle {{ background: {C['border']}; width: 1px; }}
 QStatusBar {{ background: {C['side']}; color: {C['muted']}; border-top: 1px solid {C['border']}; }}
 QToolTip {{ background: {C['card']}; color: {C['text']}; border: 1px solid {C['border']}; padding: 4px; }}

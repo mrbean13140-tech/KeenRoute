@@ -32,10 +32,15 @@ def test_install_and_restart_rename(monkeypatch, tmp_path):
     monkeypatch.setattr(U.sys, "frozen", True, raising=False)
     monkeypatch.setattr(U.sys, "executable", str(cur))
     started = []
-    monkeypatch.setattr(U.subprocess, "Popen", lambda args, **k: started.append(args))
+    monkeypatch.setenv("_MEIPASS2", "C:/tmp/_MEI123")
+    monkeypatch.setenv("_PYI_APPLICATION_HOME_DIR", "C:/tmp/_MEI123")
+    envs = []
+    monkeypatch.setattr(U.subprocess, "Popen", lambda args, **k: (started.append(args), envs.append(k["env"])))
     assert U._download_dir() == tmp_path  # качаем рядом с exe
     U.install_and_restart(new)
     assert cur.read_bytes() == b"new" and (tmp_path / "KeenRoute.old.exe").read_bytes() == b"old"
     assert started == [[str(cur.resolve())]]
+    assert envs[0]["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+    assert "_MEIPASS2" not in envs[0] and "_PYI_APPLICATION_HOME_DIR" not in envs[0]
     U.cleanup_old()
     assert not (tmp_path / "KeenRoute.old.exe").exists()

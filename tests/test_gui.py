@@ -248,6 +248,7 @@ def test_dns_dialog(app):
     d = w.dns_panel
     w.open_dns()
     assert w.tabs.currentWidget() is d and d.cur.topLevelItemCount() >= 4
+    assert w.iflist.isHidden() and w.route_spacer.isVisibleTo(w.route_spacer.parentWidget())  # шлюзы скрыты на вкладке DoT / DoH
     for p, kind, cb in d.boxes:
         if p["id"] == "adguard-family" and kind == "dot":
             cb.setChecked(True)

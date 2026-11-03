@@ -101,8 +101,10 @@ class MainWindow(QMainWindow):
         self.dns_panel = DnsPanel(self, providers, self.apply_dns)
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
-        self.tabs.addTab(routing, "Маршрутизация DNS")
-        self.tabs.addTab(self.dns_panel, "DoT / DoH")
+        self.tabs.setObjectName("pages")
+        self.tabs.addTab(routing, "🧭  Маршрутизация DNS")
+        self.tabs.addTab(self.dns_panel, "🔒  DoT / DoH")
+        self.tabs.currentChanged.connect(self._on_tab)
         split.addWidget(self.tabs)
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
@@ -150,7 +152,8 @@ class MainWindow(QMainWindow):
         self.upd_btn.setVisible(False)
         lay.addWidget(self.upd_btn)
         lay.addSpacing(4)
-        lay.addWidget(_label("МАРШРУТИЗАЦИЯ DNS", "caption"))
+        self.route_cap = _label("ШЛЮЗЫ", "caption")
+        lay.addWidget(self.route_cap)
         self.iflist = GatewayList(None)  # источник drag — таблица, задаётся после её создания
         self.iflist.dropped.connect(self._on_drop)
         self.iflist.setToolTip("Перетащите сюда строки таблицы — списки переедут на этот шлюз")
@@ -159,6 +162,9 @@ class MainWindow(QMainWindow):
         self.iflist.setTextElideMode(Qt.ElideRight)
         self.iflist.currentItemChanged.connect(self._on_filter)
         lay.addWidget(self.iflist, 1)
+        self.route_spacer = QWidget()  # занимает место списка шлюзов на вкладке DoT / DoH
+        lay.addWidget(self.route_spacer, 1)
+        self.route_spacer.hide()
 
         lay.addWidget(_label("ДЕЙСТВИЯ", "caption"))
         for text, fn, tip in [
@@ -771,6 +777,13 @@ class MainWindow(QMainWindow):
         UpdateDialog(self, getattr(self, "_new_release", None)).exec()
 
     # ---------- DNS ----------
+    def _on_tab(self, idx):
+        """Шлюзы слева относятся только к маршрутизации — на вкладке DoT / DoH прячем."""
+        routing = idx == 0
+        for w in (self.route_cap, self.iflist):
+            w.setVisible(routing)
+        self.route_spacer.setVisible(not routing)
+
     def open_dns(self):
         self.tabs.setCurrentWidget(self.dns_panel)
 

@@ -67,5 +67,18 @@ def install() -> Path:
     return dst
 
 
+def clean_env() -> dict:
+    """Окружение для запуска другого exe PyInstaller: без переменных текущего процесса,
+    иначе новый exe ищет модули во временной папке старого (No module named 'unicodedata')."""
+    env = {k: v for k, v in os.environ.items()
+           if not (k.startswith("_MEI") or k.startswith("_PYI") or k in ("TCL_LIBRARY", "TK_LIBRARY"))}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:  # убрать временную папку текущего процесса из PATH
+        env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep)
+                                      if not p.startswith(meipass))
+    return env
+
+
 def launch(exe: Path) -> None:
-    subprocess.Popen([str(exe)], cwd=str(exe.parent), creationflags=0x00000008, close_fds=True)
+    subprocess.Popen([str(exe)], cwd=str(exe.parent), env=clean_env(), creationflags=0x00000008, close_fds=True)
