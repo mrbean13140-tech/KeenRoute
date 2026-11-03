@@ -297,3 +297,18 @@ def test_dns_limit(app):
     assert d._update_limit() == 14 and "14 из 8" in d.limit.text()
     d._accept()
     assert applied == []  # не применено из-за лимита
+
+
+def test_catalog_db_update_button(app, tmp_path):
+    from keenetic_dns.core import catalog as K
+    from keenetic_dns.ui.catalog_dialog import CatalogDialog
+    import time
+    db = K.DomainDB(tmp_path / "db.json")
+    db.data, db.updated = {"svc": {"domains": ["svc.com"], "include": [], "skipped": 0}}, time.time()
+    db.update = lambda: setattr(db, "last_changed", 1) or 1   # «скачали» базу без интернета
+    d = CatalogDialog(None, {}, [], db, [], None, pending_updates=lambda: 2)
+    d._update_db()
+    _wait(app)
+    assert "2" in d.b_apply_upd.text()
+    d._apply_updates()
+    assert d.apply_db_updates and d.result == []

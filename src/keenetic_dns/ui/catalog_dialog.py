@@ -24,7 +24,7 @@ class CatalogDialog(QDialog):
     """Результат после accept(): self.result = [(Group, [(source_key, excluded)])]"""
 
     def __init__(self, parent, groups: dict[str, Group], ifaces, db: K.DomainDB, templates: list[K.Entry],
-                 default_gw: str | None = None):
+                 default_gw: str | None = None, pending_updates=None):
         super().__init__(parent)
         self.setWindowTitle("Каталог сервисов")
         self.setWindowIcon(app_icon())
@@ -32,6 +32,8 @@ class CatalogDialog(QDialog):
         self.setMinimumSize(760, 480)
         self.groups, self.ifaces, self.db, self.templates = groups, ifaces, db, templates
         self.default_gw = default_gw
+        self.pending_updates = pending_updates or (lambda: 0)  # сколько списков из каталога можно дополнить
+        self.apply_db_updates = False
         self.checked: dict[str, K.Entry] = {}   # key → Entry
         self.extra: list[K.Entry] = []           # введённые вручную
         self.result = []
@@ -66,12 +68,16 @@ class CatalogDialog(QDialog):
         self.db_label = QLabel("", objectName="muted")
         self.db_label.setWordWrap(True)
         row.addWidget(self.db_label, 1)
-        self.b_upd = QPushButton("⟳")
-        self.b_upd.setToolTip("Проверить обновления базы доменов")
-        self.b_upd.setFixedWidth(40)
-        self.b_upd.clicked.connect(self._update_db)
-        row.addWidget(self.b_upd)
         ll.addLayout(row)
+        self.b_upd = QPushButton("⟳  Обновить базу")
+        self.b_upd.setToolTip("Скачать свежую базу доменов (нужен интернет)")
+        self.b_upd.clicked.connect(self._update_db)
+        ll.addWidget(self.b_upd)
+        self.b_apply_upd = QPushButton("", objectName="primary")
+        self.b_apply_upd.setToolTip("Добавить в списки из каталога домены, которые появились в базе")
+        self.b_apply_upd.clicked.connect(self._apply_updates)
+        self.b_apply_upd.setVisible(False)
+        ll.addWidget(self.b_apply_upd)
         self._show_db_status()
         split.addWidget(left)
 
@@ -152,7 +158,7 @@ class CatalogDialog(QDialog):
             when = dt.datetime.fromtimestamp(self.db.updated).strftime("%d.%m %H:%M")
             self.db_label.setText(f"База: {len(self.db.data)} сервисов · обновлена {when}")
         else:
-            self.db_label.setText("База не скачана — нажмите ⟳, чтобы скачать (нужен интернет, ~1 МБ). "
+            self.db_label.setText("База не скачана — нажмите «Обновить базу» (нужен интернет, ~1 МБ). "
                                   "Шаблоны работают и без неё.")
 
     def _update_db(self):
@@ -164,12 +170,21 @@ class CatalogDialog(QDialog):
             self._show_db_status()
             self.db_label.setText(self.db_label.text() + f" · изменено: {self.db.last_changed}")
             self._search()
+            n = self.pending_updates()
+            if n:
+                self.b_apply_upd.setText(f"＋  Новые домены для списков: {n}")
+                self.b_apply_upd.setVisible(True)
 
         def fail(msg):
             self.b_upd.setEnabled(True)
             self._show_db_status()
             QMessageBox.warning(self, "База", f"Не удалось обновить базу:\n{msg}")
         run_quiet(self.db.update, done, fail)
+
+    def _apply_updates(self):
+        self.apply_db_updates = True
+        self.result = []
+        self.accept()
 
     # ---------- поиск ----------
     def _add_header(self, text):

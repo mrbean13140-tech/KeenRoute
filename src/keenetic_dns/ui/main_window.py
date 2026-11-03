@@ -163,8 +163,6 @@ class MainWindow(QMainWindow):
         lay.addWidget(_label("ДЕЙСТВИЯ", "caption"))
         for text, fn, tip in [
             ("📚   Каталог сервисов", self.open_catalog, "Шаблоны и поиск по базе доменов"),
-            ("⟳   Проверить обновления базы", self.check_db_updates,
-             "Скачать свежую базу доменов и показать, что добавится в списки из каталога"),
             ("⭳   Импорт из файла", self.import_dialog, "Загрузить списки из .json или .txt"),
             ("⭱   Экспорт в файл", self.export_dialog, "Сохранить отмеченные (или все) списки в файл"),
             ("💾   Создать бэкап", self.make_backup, "Сохранить конфигурацию роутера в файл"),
@@ -577,8 +575,13 @@ class MainWindow(QMainWindow):
 
     def open_catalog(self):
         from .catalog_dialog import CatalogDialog
-        dlg = CatalogDialog(self, self.groups, self.ifaces, self.db, self.templates, self.gw.currentData())
-        if dlg.exec() != QDialog.Accepted or not dlg.result:
+        dlg = CatalogDialog(self, self.groups, self.ifaces, self.db, self.templates, self.gw.currentData(),
+                            pending_updates=self._pending_db_count)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        if dlg.apply_db_updates:
+            return self.update_from_db()
+        if not dlg.result:
             return
         t = self._target()
         pending = []
@@ -619,6 +622,13 @@ class MainWindow(QMainWindow):
                 + [x for x in new if K.IP_RE.match(x)]
             g.domains = list(dict.fromkeys(g.domains))
         return t
+
+    def _pending_db_count(self) -> int:
+        """Сколько списков из каталога получат новые домены из текущей базы."""
+        t = self._db_target()
+        if t is None:
+            return 0
+        return sum(1 for n, g in t.items() if n in self.groups and g.domains != self.groups[n].domains)
 
     def update_from_db(self):
         """Применить текущую локальную базу к спискам из каталога (без скачивания)."""
