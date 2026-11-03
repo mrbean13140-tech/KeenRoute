@@ -214,10 +214,11 @@ class MainWindow(QMainWindow):
         self.chk_all = QCheckBox("Выбрать все")
         self.chk_all.setCursor(Qt.PointingHandCursor)
         self.chk_all.clicked.connect(self._check_all)
-        self.check = QLineEdit(placeholderText="Проверить домен — куда пойдёт")
+        self.check = QLineEdit(placeholderText="Куда пойдёт сайт? Например: m.youtube.com + Enter")
         lead_icon(self.check, "compass")
         self.check.setMinimumWidth(160)
-        self.check.setToolTip("Введите домен и нажмите Enter")
+        self.check.setToolTip("Введите адрес сайта (m.youtube.com, chatgpt.com) и нажмите Enter — покажу, в каком он "
+                              "списке и через какой шлюз пойдёт. Можно ввести и слово (youtube) — найду списки с ним.")
         self.check.returnPressed.connect(lambda: self.check_domain(self.check.text()))
         # строка 1 — действия со списками, строка 2 — поиск и проверка
         tools = QWidget()
@@ -698,6 +699,20 @@ class MainWindow(QMainWindow):
         self.ed_count.setText(" · ".join(parts) if lines else "")
 
     def check_domain(self, text):
+        word = text.strip().lower()
+        if word and "." not in word and "/" not in word:  # слово, а не домен: ищем списки и домены с ним
+            found = []
+            for g in self.groups.values():
+                doms = [e for e in g.domains if word in e]
+                if word in g.title.lower() or doms:
+                    i = self._iface(g.interface) if g.interface else None
+                    gw = i.short if i else (g.interface or "без шлюза")
+                    found.append(f"«{g.title}» → {gw}" + (f"  ({', '.join(doms[:3])}{'…' if len(doms) > 3 else ''})"
+                                                         if doms else ""))
+            if found:
+                return Toast(self, f"«{word}» встречается в списках:\n" + "\n".join(found), kind="ok", ms=10000)
+            return Toast(self, f"«{word}» нет ни в одном списке. Введите адрес сайта целиком, например {word}.com",
+                         kind="info", ms=8000)
         d = normalize_entry(text)
         if not d:
             return Toast(self, "Это не похоже на домен или IP", kind="bad")
@@ -716,8 +731,8 @@ class MainWindow(QMainWindow):
                     except ValueError:
                         pass
         if not hits:
-            return Toast(self, f"{d} — ни в одном списке: пойдёт по обычному маршруту (через провайдера)", kind="info",
-                         ms=8000)
+            return Toast(self, f"{d} — нет ни в одном списке, значит пойдёт напрямую через провайдера, без VPN",
+                         kind="info", ms=8000)
         lines = []
         for g, e in hits:
             i = self._iface(g.interface) if g.interface else None

@@ -280,10 +280,12 @@ def test_design_features(app, tmp_path):
     try:
         w.check_domain("m.youtube.com")
         w.check_domain("example.net")
+        w.check_domain("youtube")
     finally:
         Toast.__init__ = orig
     assert "«YT»" in shown[0] and "Home" in shown[0]
     assert "ни в одном списке" in shown[1]
+    assert "«YT»" in shown[2] and "youtube.com" in shown[2]
     # перетаскивание: выбранный список на шлюз Wireguard1
     w.table.setCurrentCell(1, mw.COL_NAME)  # YT
     w._on_drop("Wireguard1")
