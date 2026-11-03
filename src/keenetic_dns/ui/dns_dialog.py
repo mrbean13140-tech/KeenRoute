@@ -36,8 +36,9 @@ class DnsPanel(QWidget):
         ll.setContentsMargins(14, 16, 14, 12)
         ll.setSpacing(8)
         ll.addWidget(QLabel("Сейчас на роутере", objectName="h2"))
-        ll.addWidget(QLabel("Снимите галочку или выделите и нажмите «Удалить». Раскройте сервер, "
-                            "чтобы увидеть домены.", objectName="muted", wordWrap=True))
+        ll.addWidget(QLabel("Выделите сервер и нажмите «Удалить» — он сразу удалится с роутера. Можно снять "
+                            "несколько галочек и нажать «Применить». Раскройте сервер, чтобы увидеть домены.",
+                            objectName="muted", wordWrap=True))
         self.cur = QTreeWidget()
         self.cur.setHeaderHidden(True)
         self.cur.itemChanged.connect(self._mark)
@@ -51,7 +52,7 @@ class DnsPanel(QWidget):
         row.addWidget(self.limit, 1)
         rm = QPushButton("Удалить", objectName="danger")
         set_icon(rm, "trash", "danger")
-        rm.setToolTip("Отметить выделенный сервер или домен на удаление")
+        rm.setToolTip("Удалить выделенный сервер (или домен) с роутера — с предпросмотром и проверкой")
         rm.clicked.connect(self._remove_selected)
         row.addWidget(rm)
         ll.addLayout(row)
@@ -192,9 +193,15 @@ class DnsPanel(QWidget):
         self.info.setText("\n".join(lines))
 
     def _remove_selected(self):
+        """Сразу удалить выделенное с роутера (плюс всё, что уже отмечено на удаление)."""
         it = self.cur.currentItem()
-        if it and (it.data(0, Qt.UserRole) or it.childCount()):
+        if not it:
+            return QMessageBox.information(self, "Удаление", "Выделите сервер или домен в списке слева.")
+        if it.data(0, Qt.UserRole) or it.childCount():
             it.setCheckState(0, Qt.Unchecked)
+        _, remove = self._planned()
+        if remove:
+            self.on_apply([], remove)
 
     def _planned(self):
         doms = [d for d in (normalize_entry(x) for x in self.domains.text().split(",")) if d]

@@ -254,7 +254,7 @@ def test_dns_dialog(app):
             cb.setChecked(True)
     leaf = next(x for x in d._leaves() if x.data(0, Qt.UserRole).addr == "8.8.8.8")
     d.cur.setCurrentItem(leaf)
-    d._remove_selected()  # убрать 8.8.8.8
+    leaf.setCheckState(0, Qt.Unchecked)  # пакетно: отметить 8.8.8.8, применить вместе с шаблоном
     assert leaf.font(0).strikeOut()
     assert "из 8" in d.limit.text()
     _shot(w, "dns.png")
@@ -328,3 +328,19 @@ def test_catalog_db_update_button(app, tmp_path):
     assert "2" in d.b_apply_upd.text()
     d._apply_updates()
     assert d.apply_db_updates and d.result == []
+
+
+def test_dns_delete_button_applies_now(app):
+    from keenetic_dns.core import dns as D
+    from .test_dns import CFG as DNS_CFG
+    fake = FakeRouter(CFG + DNS_CFG, IFACES)
+    w = mw.MainWindow(fake, {"model": "KN-1010", "title": "4.2"}, {"name": "Дом"})
+    _wait(app)
+    d = w.dns_panel
+    top = next(d.cur.topLevelItem(i) for i in range(d.cur.topLevelItemCount())
+               if "cloudflare-dns.com" in d.cur.topLevelItem(i).text(0))
+    d.cur.setCurrentItem(top)
+    d._remove_selected()   # сразу удаляет с роутера
+    _wait(app)
+    assert w.last_apply["ok"]
+    assert D.Upstream("doh", "https://cloudflare-dns.com/dns-query") not in fake.dns
