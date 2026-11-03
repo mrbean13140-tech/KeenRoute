@@ -307,10 +307,11 @@ def test_dns_limit(app):
     applied = []
     d = DnsPanel(None, providers, lambda a, r: applied.append((a, r)))
     d.set_current([])
+    d.domains.setText("a.ru, b.ru")
     for p, kind, cb in d.boxes:
         if kind in ("dot", "doh"):
-            cb.setChecked(True)  # 7 провайдеров × 2 = 14 > 8
-    assert d._update_limit() == 14 and "14 из 8" in d.limit.text()
+            cb.setChecked(True)  # 7 провайдеров × 2 домена = 14 записей DoT и 14 DoH > 8
+    assert d._update_limit() == 14 and "DoT: 14 из 8" in d.limit.text()
     d._accept()
     assert applied == []  # не применено из-за лимита
 
@@ -344,3 +345,20 @@ def test_dns_delete_button_applies_now(app):
     _wait(app)
     assert w.last_apply["ok"]
     assert D.Upstream("doh", "https://cloudflare-dns.com/dns-query") not in fake.dns
+
+
+def test_dns_remove_dot_with_sni_fallback(app):
+    """Роутер не принимает sni в «no …»: программа пробует короче и возвращает задетые записи."""
+    from keenetic_dns.core import dns as D
+    cfg = CFG + ["dns-proxy",
+                 "    tls upstream 77.88.8.8 853 sni common.dot.dns.yandex.net domain wb.ru",
+                 "    tls upstream 77.88.8.8 853 sni common.dot.dns.yandex.net domain ozon.ru", "!"]
+    fake = FakeRouter(cfg, IFACES)
+    w = mw.MainWindow(fake, {"model": "KN-1010", "title": "4.2"}, {"name": "Дом"})
+    _wait(app)
+    wb = D.Upstream("dot", "77.88.8.8", "common.dot.dns.yandex.net", 853, "wb.ru")
+    w.apply_dns([], [wb])
+    _wait(app)
+    assert w.last_apply["ok"], w.last_apply
+    assert wb not in fake.dns
+    assert D.Upstream("dot", "77.88.8.8", "common.dot.dns.yandex.net", 853, "ozon.ru") in fake.dns

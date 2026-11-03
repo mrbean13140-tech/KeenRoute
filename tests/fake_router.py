@@ -73,6 +73,16 @@ class FakeRouter:
                 g.interface, g.reject = iface, "reject" in rest
             return
         from keenetic_dns.core.dns import parse_dns
+        if c.startswith("no dns-proxy tls upstream"):  # как NDMS: sni в «no» нельзя, короткая форма удаляет все записи
+            from keenetic_dns.api.rci import RCIError
+            if " sni " in c:
+                raise RCIError(f"{c}: argument parse error.")
+            parts = c.split()
+            addr = parts[4]
+            dom = parts[parts.index("domain") + 1] if "domain" in parts else None
+            self.dns = [x for x in self.dns if not (x.kind == "dot" and x.addr == addr
+                                                    and (dom is None or x.domain == dom))]
+            return
         if c.startswith(("dns-proxy tls", "dns-proxy https", "no dns-proxy tls", "no dns-proxy https",
                          "ip name-server", "no ip name-server")):
             neg = c.startswith("no ")

@@ -37,10 +37,13 @@ def test_commands_roundtrip():
     assert D.Upstream("plain", "1.1.1.1", iface="Wireguard2").cmd() == 'ip name-server 1.1.1.1 "" on Wireguard2'
 
 
-def test_limit_counts_servers_not_domains():
+def test_limit_counts_entries_per_kind():
     u = D.parse_dns(CFG)
-    # Яндекс DoT (для wbbasket) + Cloudflare DoH + Яндекс DoH (для ozon) = 3 сервера
-    assert len(D.encrypted_servers(u)) == 3
+    assert D.count_kind(u, "dot") == 1 and D.count_kind(u, "doh") == 2
+    many = [D.Upstream("doh", "https://x/dns-query", domain=f"d{i}.ru") for i in range(9)]
+    assert D.over_limit(many) == ["DoH: 9 из 8"]
+    assert D.remove_candidates(D.Upstream("dot", "1.1.1.1", "one", 853, "a.ru"))[:2] == [
+        "no dns-proxy tls upstream 1.1.1.1 853 sni one domain a.ru", "no dns-proxy tls upstream 1.1.1.1 853 domain a.ru"]
     p = D.load_providers("assets/dns.json")
     assert D.provider_name(D.Upstream("doh", "https://cloudflare-dns.com/dns-query"), p) == "Cloudflare"
     assert D.provider_name(D.Upstream("dot", "77.88.8.8", "common.dot.dns.yandex.net"), p) == "Яндекс"

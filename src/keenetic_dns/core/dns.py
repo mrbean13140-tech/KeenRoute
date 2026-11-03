@@ -108,7 +108,34 @@ def verify_dns(after: list[Upstream], add: list[Upstream], remove: list[Upstream
            [f"не удалено: {u.label}" for u in remove if u in s]
 
 
-MAX_ENCRYPTED = 8  # help.keenetic.com: не более 8 серверов DoT/DoH на роутере
+MAX_ENCRYPTED = 8  # лимит NDMS: не более 8 записей DoT и отдельно 8 записей DoH (каждая привязка к домену — запись)
+
+
+def count_kind(ups, kind: str) -> int:
+    return sum(1 for u in ups if u.kind == kind)
+
+
+def over_limit(ups) -> list[str]:
+    out = []
+    for kind, name in (("dot", "DoT"), ("doh", "DoH")):
+        n = count_kind(ups, kind)
+        if n > MAX_ENCRYPTED:
+            out.append(f"{name}: {n} из {MAX_ENCRYPTED}")
+    return out
+
+
+def remove_candidates(u: Upstream) -> list[str]:
+    """Варианты команды удаления от точной к короткой: синтаксис «no …» в NDMS не принимает часть параметров."""
+    dom = f" domain {u.domain}" if u.domain else ""
+    if u.kind == "dot":
+        c = [u.cmd(remove=True), f"no dns-proxy tls upstream {u.addr} {u.port}{dom}",
+             f"no dns-proxy tls upstream {u.addr}{dom}", f"no dns-proxy tls upstream {u.addr} {u.port}",
+             f"no dns-proxy tls upstream {u.addr}"]
+    elif u.kind == "doh":
+        c = [u.cmd(remove=True), f"no dns-proxy https upstream {u.addr}{dom}", f"no dns-proxy https upstream {u.addr}"]
+    else:
+        c = [u.cmd(remove=True), f"no ip name-server {u.addr}"]
+    return list(dict.fromkeys(c))
 
 
 def server_key(u: Upstream) -> tuple[str, str]:

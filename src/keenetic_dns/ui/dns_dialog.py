@@ -216,17 +216,19 @@ class DnsPanel(QWidget):
     def _update_limit(self, *_):
         add, remove = self._planned()
         after = [u for u in self.current if u not in set(remove)] + add
-        n = len(D.encrypted_servers(after))
-        self.limit.setText(f"DoT/DoH-серверов: {n} из {D.MAX_ENCRYPTED}")
-        self.limit.setStyleSheet(f"color: {COL['bad'] if n > D.MAX_ENCRYPTED else COL['text']};")
-        self.limit.setToolTip("Keenetic поддерживает не более 8 серверов DoT/DoH. Один сервер, указанный для "
-                              "нескольких доменов, считается одним.")
-        return n
+        dot, doh = D.count_kind(after, "dot"), D.count_kind(after, "doh")
+        self.limit.setText(f"DoT: {dot} из {D.MAX_ENCRYPTED}   ·   DoH: {doh} из {D.MAX_ENCRYPTED}")
+        bad = max(dot, doh) > D.MAX_ENCRYPTED
+        self.limit.setStyleSheet(f"color: {COL['bad'] if bad else COL['text']};")
+        self.limit.setToolTip("Keenetic хранит не больше 8 записей DoT и 8 записей DoH. "
+                              "Сервер, указанный для нескольких доменов, — отдельная запись на каждый домен.")
+        return max(dot, doh)
 
     def _accept(self):
         if self._update_limit() > D.MAX_ENCRYPTED:
             return QMessageBox.warning(self, "Лимит DoT/DoH",
-                                       f"Keenetic поддерживает не более {D.MAX_ENCRYPTED} серверов DoT/DoH.\n"
+                                       f"Keenetic хранит не больше {D.MAX_ENCRYPTED} записей DoT и {D.MAX_ENCRYPTED} DoH "
+                                       "(каждый домен — отдельная запись).\n"
                                        "Снимите лишние галочки в шаблонах или удалите старые серверы слева.")
         self.add, self.remove = self._planned()
         if self.add or self.remove:

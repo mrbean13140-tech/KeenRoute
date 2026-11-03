@@ -820,10 +820,58 @@ class MainWindow(QMainWindow):
     def open_dns(self):
         self.tabs.setCurrentWidget(self.dns_panel)
 
+    def _dns_exec(self, add, remove, before) -> dict:
+        """Применить DNS на роутере (в фоне): удаление по одной с запасными формами команды,
+        добавление пачкой, восстановление случайно задетых записей, сохранение, проверка."""
+        errors = []
+        for u in remove:
+            if u not in before:
+                continue
+            last = ""
+            for cmd in D.remove_candidates(u):
+                try:
+                    self.c.run([cmd])
+                    last = ""
+                    break
+                except Exception as e:  # noqa: BLE001
+                    last = str(e)
+                    if "parse" not in last.lower() and "argument" not in last.lower():
+                        break
+            if last:
+                errors.append(last)
+        add_cmds = [u.cmd() for u in add if u not in before]
+        if add_cmds:
+            try:
+                self.c.run(add_cmds)
+            except Exception as e:  # noqa: BLE001
+                errors.append(str(e))
+        mid = D.parse_dns(self.c.running_config())
+        lost = [u for u in before if u not in remove and u not in mid]  # задело короткой формой «no …»
+        if lost:
+            try:
+                self.c.run([u.cmd() for u in lost])
+            except Exception as e:  # noqa: BLE001
+                errors.append(str(e))
+        try:
+            self.c.run(["system configuration save"])
+        except Exception as e:  # noqa: BLE001
+            errors.append(str(e))
+        after = D.parse_dns(self.c.running_config())
+        left = D.verify_dns(after, add, remove) + [f"пропало: {u.label}" for u in before
+                                                    if u not in remove and u not in after]
+        return {"error": "\n".join(errors) or None, "left": left, "after": after}
+
     def apply_dns(self, add: list[D.Upstream], remove: list[D.Upstream]):
         cmds = D.plan_dns(getattr(self, "dns", []), add, remove)
         if not cmds:
             return QMessageBox.information(self, "DNS", "Нечего менять.")
+        result = [u for u in getattr(self, "dns", []) if u not in set(remove)] + [u for u in add]
+        over = D.over_limit(result)
+        if over:
+            return QMessageBox.warning(self, "Лимит DoT/DoH",
+                                       "Keenetic хранит не больше 8 записей DoT и 8 записей DoH "
+                                       "(каждый домен — отдельная запись).\nПосле изменений было бы: "
+                                       + ", ".join(over) + ".\nУдалите лишние записи или укажите меньше доменов.")
         cur = set(getattr(self, "dns", []))
         summary = [f"− Удалить {u.label}" for u in remove if u in cur] + \
                   [f"+ Добавить {u.label}" for u in add if u not in cur]
@@ -834,14 +882,7 @@ class MainWindow(QMainWindow):
 
         def work():
             lines = self.c.running_config()
-            backup = io.save_backup(lines, label)
-            error = None
-            try:
-                self.c.run(cmds)
-            except Exception as e:  # noqa: BLE001
-                error = str(e)
-            after = D.parse_dns(self.c.running_config())
-            return {"backup": backup, "error": error, "left": D.verify_dns(after, add, remove), "after": after}
+            return {"backup": io.save_backup(lines, label), **self._dns_exec(add, remove, D.parse_dns(lines))}
 
         def done(r):
             self.backup_path = r["backup"]
@@ -850,10 +891,11 @@ class MainWindow(QMainWindow):
                 msg = "DNS применились не полностью.\n\n" + "\n".join(filter(None, [r["error"], *r["left"]]))
                 if QMessageBox.question(self, "Проверка не пройдена", msg + "\n\nОткатить?") == QMessageBox.Yes:
                     now = set(r["after"])
-                    undo = [u.cmd(remove=True) for u in add if u in now and u not in cur] + \
-                           [u.cmd() for u in remove if u not in now and u in cur]
-                    if undo:
-                        run_bg(self, self.c.run, lambda _: self.refresh(), C.with_save(undo), busy="Откатываю DNS…")
+                    back_add = [u for u in remove if u not in now and u in cur]
+                    back_rm = [u for u in add if u in now and u not in cur]
+                    if back_add or back_rm:
+                        run_bg(self, lambda: self._dns_exec(back_add, back_rm, list(now)),
+                               lambda _: self.refresh(), busy="Откатываю DNS…")
                         return
             else:
                 self.statusBar().showMessage(f"✓ DNS применены и проверены · бэкап {r['backup'].name}", 8000)
