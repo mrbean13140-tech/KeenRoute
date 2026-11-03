@@ -85,11 +85,11 @@ def preset_upstreams(p: dict, kind: str, domains: list[str] | None = None) -> li
     doms = domains or [""]
     out = []
     for d in doms:
-        if kind == "plain":
+        if kind == "plain" and p.get("plain"):
             out += [Upstream("plain", ip, domain=d) for ip in p["plain"][:2]]
-        elif kind == "dot":
+        elif kind == "dot" and p.get("dot"):
             out.append(Upstream("dot", p["dot"]["ip"], p["dot"]["sni"], 853, d))
-        elif kind == "doh":
+        elif kind == "doh" and p.get("doh"):
             out.append(Upstream("doh", p["doh"], domain=d))
     return out
 
@@ -151,7 +151,7 @@ def provider_name(u: Upstream, providers: list[dict]) -> str:
     for p in providers:
         if u.kind == "doh" and u.addr == p.get("doh"):
             return p["title"]
-        if u.kind == "dot" and (u.sni == p["dot"]["sni"] or u.addr == p["dot"]["ip"]):
+        if u.kind == "dot" and p.get("dot") and (u.sni == p["dot"]["sni"] or u.addr == p["dot"]["ip"]):
             return p["title"]
         if u.kind == "plain" and u.addr in p.get("plain", []):
             return p["title"]

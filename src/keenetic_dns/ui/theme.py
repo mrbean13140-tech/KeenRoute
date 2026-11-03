@@ -91,6 +91,7 @@ QPushButton#icon:hover {{ background: {C['card']}; border: 1px solid {C['border'
 QPushButton#chip {{ background: transparent; border: 1px solid {C['border']}; border-radius: 15px; padding: 0 12px;
                     color: {C['muted']}; font-weight: 600; }}
 QPushButton#chip:hover {{ border: 1px solid {C['accent']}; color: {C['text']}; }}
+QPushButton#chip:disabled {{ color: {C['border']}; border: 1px dashed {C['border']}; }}
 QPushButton#chip:checked {{ background: {C['accent']}; border: 1px solid {C['accent']}; color: white; }}
 QPushButton#nav {{
     background: transparent; border: none; border-radius: 8px; text-align: left; padding: 9px 12px; icon-size: 18px;

@@ -312,8 +312,8 @@ def test_dns_limit(app):
     d.domains.setText("a.ru, b.ru")
     for p, kind, cb in d.boxes:
         if kind in ("dot", "doh"):
-            cb.setChecked(True)  # 7 провайдеров × 2 домена = 14 записей DoT и 14 DoH > 8
-    assert d._update_limit() == 14 and "DoT: 14 из 8" in d.limit.text()
+            cb.setChecked(True)  # все провайдеры × 2 домена — далеко за лимитом 8
+    assert d._update_limit() > 8 and "из 8" in d.limit.text()
     d._accept()
     assert applied == []  # не применено из-за лимита
 

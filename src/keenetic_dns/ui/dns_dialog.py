@@ -82,9 +82,9 @@ class DnsPanel(QWidget):
             tl.addWidget(QLabel(p["title"], objectName="h2"))
             tl.addWidget(QLabel(p.get("note", ""), objectName="muted"))
             cl.addLayout(tl, 1)
-            for kind, text, tip in [("plain", "DNS", ", ".join(p["plain"][:2])),
-                                    ("dot", "DoT", f"{p['dot']['ip']} · {p['dot']['sni']}"),
-                                    ("doh", "DoH", p["doh"])]:
+            for kind, text, tip in [("plain", "DNS", ", ".join(p.get("plain", [])[:2])),
+                                    ("dot", "DoT", f"{p['dot']['ip']} · {p['dot']['sni']}" if p.get("dot") else ""),
+                                    ("doh", "DoH", p.get("doh", ""))]:
                 cb = QPushButton(text)  # переключатель-«чип»: область нажатия = видимая кнопка
                 cb.setObjectName("chip")
                 cb.setCheckable(True)
@@ -92,6 +92,9 @@ class DnsPanel(QWidget):
                 cb.setCursor(Qt.PointingHandCursor)
                 cb.setFixedHeight(30)
                 cb.setMinimumWidth(58)
+                if not tip:  # провайдер не поддерживает этот протокол
+                    cb.setEnabled(False)
+                    cb.setToolTip(f"{p['title']} не поддерживает {text}")
                 cl.addWidget(cb)
                 self.boxes.append((p, kind, cb))
                 cb.toggled.connect(self._update_limit)

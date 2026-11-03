@@ -47,3 +47,12 @@ def test_limit_counts_entries_per_kind():
     p = D.load_providers("assets/dns.json")
     assert D.provider_name(D.Upstream("doh", "https://cloudflare-dns.com/dns-query"), p) == "Cloudflare"
     assert D.provider_name(D.Upstream("dot", "77.88.8.8", "common.dot.dns.yandex.net"), p) == "Яндекс"
+
+
+def test_all_providers_valid():
+    for p in D.load_providers("assets/dns.json"):
+        assert p.get("dot") or p.get("doh"), p["id"]
+        for kind in ("plain", "dot", "doh"):
+            for u in D.preset_upstreams(p, kind):
+                assert D.parse_dns(["dns-proxy", "    " + u.cmd().split(" ", 1)[1], "!"] if kind != "plain"
+                                   else [u.cmd()]) == [u], (p["id"], kind)
