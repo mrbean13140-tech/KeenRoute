@@ -400,3 +400,29 @@ def fresh_entries(source: str, templates: list[Entry], db: DomainDB) -> list[str
         e = db.entry(ident)
         return e.domains if e else []
     return []
+
+
+class DisabledStore:
+    """Выключенные списки: %APPDATA%\\KeenRoute\\disabled.json — {роутер: {список: {"interface", "reject"}}}.
+    Список на роутере остаётся, у него лишь снят маршрут; здесь помним, куда вернуть."""
+
+    def __init__(self, path: Path | None = None):
+        self.path = path or (app_dir() / "disabled.json")
+        try:
+            self.data = json.loads(self.path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            self.data = {}
+
+    def save(self):
+        self.path.write_text(json.dumps(self.data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    def for_router(self, router: str) -> dict:
+        return self.data.get(router, {})
+
+    def set(self, router: str, group: str, interface: str, reject: bool):
+        self.data.setdefault(router, {})[group] = {"interface": interface, "reject": reject}
+        self.save()
+
+    def drop(self, router: str, group: str):
+        if self.data.get(router, {}).pop(group, None) is not None:
+            self.save()

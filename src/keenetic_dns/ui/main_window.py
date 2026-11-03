@@ -66,6 +66,8 @@ class MainWindow(QMainWindow):
         self._pending_sources = []
         self.db = K.DomainDB()
         self.sources = K.SourceStore()
+        self.disabled = K.DisabledStore()
+        self._on_success = None  # что сделать после успешного применения (запомнить выключенные и т.п.)
         try:
             self.templates = K.load_templates()
         except Exception:  # noqa: BLE001
@@ -289,6 +291,9 @@ class MainWindow(QMainWindow):
         self.sel_buttons = [
             _btn("Назначить шлюз", self.assign_selected, "primary", "Назначить выбранный шлюз отмеченным спискам"),
             _btn("Снять шлюз", self.unassign_selected),
+            _btn("Выключить", self.disable_selected, tip="Временно отключить: домены пойдут напрямую, "
+                 "список и домены остаются, шлюз запоминается", ic="pause"),
+            _btn("Включить", self.enable_selected, tip="Вернуть выключенные списки на их шлюз", ic="play"),
             _btn("Разделение…", self.split_dialog, tip="Распределить отмеченные списки по разным шлюзам"),
             _btn("Экспорт", self.export_dialog, ic="export"),
             _btn("Удалить", self.delete_groups, "danger", ic="trash"),
@@ -364,6 +369,10 @@ class MainWindow(QMainWindow):
         checked = {g.name for g in self.checked()}
         self.config_lines, self.groups, self.ifaces = res
         self.dns = D.parse_dns(self.config_lines)
+        for n in list(self.disabled.for_router(self._router_key())):
+            g = self.groups.get(n)
+            if not g or g.interface:
+                self.disabled.drop(self._router_key(), n)
         self.dns_panel.set_current(self.dns)
         self._filling = True
         self.table.setRowCount(0)
@@ -381,12 +390,20 @@ class MainWindow(QMainWindow):
             self.table.setItem(r, COL_NAME, name)
             self.table.setItem(r, COL_CNT, QTableWidgetItem(str(len(g.domains))))
             i = self._iface(g.interface) if g.interface else None
-            gw = QTableWidgetItem(i.short if i else (g.interface or "—"))
-            gw.setToolTip(f"{i.name} · {i.type}" if i else (g.interface or "без шлюза"))
+            off = None if g.interface else self.disabled.for_router(self._router_key()).get(g.name)
+            if off:
+                oi = self._iface(off["interface"])
+                gw = QTableWidgetItem(oi.short if oi else off["interface"])
+                gw.setToolTip("Список выключен. «Включить» вернёт его на этот шлюз")
+            else:
+                gw = QTableWidgetItem(i.short if i else (g.interface or "—"))
+                gw.setToolTip(f"{i.name} · {i.type}" if i else (g.interface or "без шлюза"))
             if not g.interface:
                 gw.setForeground(QColor(COL["muted"]))
             self.table.setItem(r, COL_GW, gw)
-            if not g.interface:
+            if off:
+                st, color = "⏸ выключен", COL["warn"]
+            elif not g.interface:
                 st, color = "", COL["muted"]
             elif not i:
                 st, color = "● нет интерфейса", COL["warn"]
@@ -591,7 +608,10 @@ class MainWindow(QMainWindow):
             Toast(self, "✓ Применено и проверено на роутере", "Отменить", lambda: self._rollback(before))
             for group, src, excluded in self._pending_sources:
                 self.sources.add(self._router_key(), group, src, excluded)
+            if self._on_success:
+                self._on_success()
         self._pending_sources = []
+        self._on_success = None
         self.refresh()
 
     # ---------- каталог ----------
@@ -939,6 +959,32 @@ class MainWindow(QMainWindow):
         t = self._target()
         for n in names:
             t[n].interface = iface
+        self.apply(t)
+
+    def disable_selected(self):
+        sel = [g for g in self.selected() if g.interface]
+        if not sel:
+            return Toast(self, "Отметьте включённые списки (с шлюзом), которые нужно выключить", kind="info")
+        key = self._router_key()
+        memo = [(g.name, g.interface, g.reject) for g in sel]
+        self._on_success = lambda: [self.disabled.set(key, n, i, r) for n, i, r in memo]
+        t = self._target()
+        for g in sel:
+            t[g.name].interface = None
+        self.apply(t)
+
+    def enable_selected(self):
+        off = self.disabled.for_router(self._router_key())
+        sel = [g for g in self.selected() if not g.interface and g.name in off]
+        if not sel:
+            return Toast(self, "Отметьте выключенные списки (статус «⏸ выключен»)", kind="info")
+        key = self._router_key()
+        names = [g.name for g in sel]
+        self._on_success = lambda: [self.disabled.drop(key, n) for n in names]
+        t = self._target()
+        for g in sel:
+            t[g.name].interface = off[g.name]["interface"]
+            t[g.name].reject = bool(off[g.name].get("reject"))
         self.apply(t)
 
     def unassign_selected(self):

@@ -364,3 +364,21 @@ def test_dns_remove_dot_with_sni_fallback(app):
     assert w.last_apply["ok"], w.last_apply
     assert wb not in fake.dns
     assert D.Upstream("dot", "77.88.8.8", "common.dot.dns.yandex.net", 853, "ozon.ru") in fake.dns
+
+
+def test_disable_enable_list(app):
+    fake = Fake()
+    w = mw.MainWindow(fake, {"model": "KN-1010", "title": "4.2"}, {"name": "Дом", "id": "home1"})
+    _wait(app)
+    row = next(r for r in range(w.table.rowCount()) if w.table.item(r, mw.COL_NAME).text() == "YT")
+    w.table.item(row, mw.COL_CHK).setCheckState(Qt.Checked)
+    w.disable_selected()
+    _wait(app)
+    assert fake.groups["youtube"].interface is None and fake.groups["youtube"].domains  # домены на месте
+    row = next(r for r in range(w.table.rowCount()) if w.table.item(r, mw.COL_NAME).text() == "YT")
+    assert "выключен" in w.table.item(row, mw.COL_ST).text() and w.table.item(row, mw.COL_GW).text() == "Home"
+    w.table.item(row, mw.COL_CHK).setCheckState(Qt.Checked)
+    w.enable_selected()
+    _wait(app)
+    assert fake.groups["youtube"].interface == "Wireguard0"
+    assert "youtube" not in w.disabled.for_router("home1")

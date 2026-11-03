@@ -74,6 +74,10 @@ def _draw(name: str, p: QPainter, s: float):
     elif name == "router":
         rect(3, 12, 18, 7, 2); line((8, 12), (8, 6)); line((16, 12), (16, 6)); circle(7.5, 15.5, 0.6)
         circle(11, 15.5, 0.6)
+    elif name == "pause":
+        line((9, 6), (9, 18)); line((15, 6), (15, 18))
+    elif name == "play":
+        line((8, 5.5), (18.5, 12), (8, 18.5), (8, 5.5))
     elif name == "check":
         line((5, 12.5), (10, 17), (19, 7))
 

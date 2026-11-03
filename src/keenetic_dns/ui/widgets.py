@@ -18,12 +18,15 @@ class Toast(QFrame):
         super().__init__(parent)
         self.setObjectName("card")
         color = {"ok": COL["ok"], "bad": COL["bad"], "info": COL["accent"]}.get(kind, COL["accent"])
-        self.setStyleSheet(f"QFrame#card {{ border-left: 4px solid {color}; }}")
+        self.setStyleSheet(f"QFrame#card {{ border: 1px solid {color}; border-left: 5px solid {color}; border-radius: 12px; }}")
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(14, 10, 10, 10)
+        lay.setContentsMargins(18, 14, 12, 14)
         lb = QLabel(text)
         lb.setWordWrap(True)
-        lb.setMaximumWidth(380)
+        lb.setMaximumWidth(520)
+        f = lb.font()
+        f.setPointSizeF(f.pointSizeF() + 1)
+        lb.setFont(f)
         lay.addWidget(lb, 1)
         if action and on_action:
             b = QPushButton(action)
@@ -51,7 +54,7 @@ class Toast(QFrame):
 
     def _place(self):
         p = self.parentWidget()
-        self.move(p.width() - self.width() - 24, p.height() - self.height() - 40)
+        self.move((p.width() - self.width()) // 2, max(70, (p.height() - self.height()) // 3))
 
     def eventFilter(self, obj, ev):
         if ev.type() == ev.Type.Resize:
