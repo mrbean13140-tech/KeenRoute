@@ -1,12 +1,16 @@
 """Общие вещи UI: фоновые задачи и диалоги."""
 from __future__ import annotations
 
+import logging
 import traceback
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox,
                                QPlainTextEdit, QPushButton, QVBoxLayout, QWidget)
+
+
+log = logging.getLogger(__name__)
 
 
 class _Signals(QObject):
@@ -17,47 +21,71 @@ class _Signals(QObject):
 class _Task(QRunnable):
     def __init__(self, fn, *a, **kw):
         super().__init__()
+        self.setAutoDelete(False)  # временем жизни управляем сами (см. _start)
         self.fn, self.a, self.kw = fn, a, kw
         self.sig = _Signals()
 
     def run(self):
         try:
-            self.sig.done.emit(self.fn(*self.a, **self.kw))
+            res = self.fn(*self.a, **self.kw)
         except Exception as e:  # noqa: BLE001
-            traceback.print_exc()
-            self.sig.error.emit(str(e))
+            log.exception("Фоновая задача упала")
+            self.sig.error.emit(str(e) or e.__class__.__name__)
+            return
+        self.sig.done.emit(res)
+
+
+_keep: set = set()
+
+
+def _safe(fn, *a):
+    """Ошибка в обработчике не должна ронять программу."""
+    try:
+        fn(*a)
+    except RuntimeError as e:
+        if "already deleted" in str(e):  # окно закрыли, пока шла фоновая задача — просто игнорируем
+            log.info("Окно закрыто до завершения задачи")
+            return
+        log.exception("Ошибка в обработчике")
+        QMessageBox.critical(None, "Ошибка", f"{e.__class__.__name__}: {e}")
+    except Exception as e:  # noqa: BLE001
+        log.exception("Ошибка в обработчике")
+        traceback.print_exc()
+        QMessageBox.critical(None, "Ошибка", f"{e.__class__.__name__}: {e}")
+
+
+def _start(t: _Task, on_done, on_error):
+    """Держим задачу живой, пока её сигналы не обработаны; отпускаем на следующем витке цикла событий
+    (удаление объекта прямо внутри его же сигнала роняло программу)."""
+    _keep.add(t)
+
+    def release():
+        QTimer.singleShot(0, lambda: _keep.discard(t))
+
+    t.sig.done.connect(lambda r: (_safe(on_done, r), release()))
+    t.sig.error.connect(lambda m: (_safe(on_error, m), release()))
+    QThreadPool.globalInstance().start(t)
 
 
 def run_bg(parent: QWidget, fn, on_done, *a, busy: str = "Подождите…", **kw):
-    """Запускает fn в пуле потоков; UI блокируется курсором и статусом."""
+    """Запускает fn в пуле потоков; окно блокируется на время работы."""
     parent.setEnabled(False)
     if hasattr(parent, "statusBar"):
         parent.statusBar().showMessage(busy)
-    t = _Task(fn, *a, **kw)
 
     def finish():
         parent.setEnabled(True)
         if hasattr(parent, "statusBar"):
             parent.statusBar().clearMessage()
 
-    t.sig.done.connect(lambda r: (finish(), on_done(r)))
-    t.sig.error.connect(lambda m: (finish(), QMessageBox.critical(parent, "Ошибка", m)))
-    QThreadPool.globalInstance().start(t)
-    parent._last_task = t  # держим ссылку
+    _start(_Task(fn, *a, **kw),
+           lambda r: (finish(), on_done(r)),
+           lambda m: (finish(), QMessageBox.critical(parent, "Ошибка", m)))
 
 
 def run_quiet(fn, on_done, on_error=None, *a, **kw):
     """Фоновая задача без блокировки окна (обновление базы, запросы в интернет)."""
-    t = _Task(fn, *a, **kw)
-    t.sig.done.connect(on_done)
-    t.sig.error.connect(on_error or (lambda m: None))
-    QThreadPool.globalInstance().start(t)
-    _keep.append(t)
-    t.sig.done.connect(lambda *_: _keep.remove(t) if t in _keep else None)
-    t.sig.error.connect(lambda *_: _keep.remove(t) if t in _keep else None)
-
-
-_keep: list = []
+    _start(_Task(fn, *a, **kw), on_done, on_error or (lambda m: log.warning("Фон: %s", m)))
 
 
 class PreviewDialog(QDialog):
