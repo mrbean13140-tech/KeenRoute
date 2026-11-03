@@ -32,6 +32,35 @@ def dump(host: str, login: str, password: str):
     }, ensure_ascii=False, indent=2))
 
 
+def offer_install() -> bool:
+    """Первый запуск из «Загрузок»: предложить установку в постоянную папку с ярлыками. True — перезапущено оттуда."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from .core import install as I
+    from .core import settings as S
+    if not I.current_exe() or I.is_installed():
+        return False
+    cfg = S.load()
+    if cfg.get("install_declined"):
+        return False
+    ans = QMessageBox.question(
+        None, "Установка KeenRoute",
+        f"Установить KeenRoute?\n\nПрограмма будет храниться в\n{I.install_dir()}\n"
+        "и появятся ярлыки на рабочем столе и в меню «Пуск».\nОбновления будут ставиться туда же.\n\n"
+        "«Нет» — запускать как есть (больше не спрашивать).")
+    if ans != QMessageBox.Yes:
+        cfg["install_declined"] = True
+        S.save(cfg)
+        return False
+    try:
+        exe = I.install()
+    except Exception as e:  # noqa: BLE001
+        QMessageBox.warning(None, "Установка", f"Не удалось установить: {e}\nПрограмма запустится как есть.")
+        return False
+    I.launch(exe)
+    return True
+
+
 def main():
     setup_logging()
     if len(sys.argv) >= 2 and sys.argv[1] == "--dump":
@@ -48,6 +77,8 @@ def main():
     from .ui import theme
     from .core import settings
     theme.apply(app, settings.load().get("theme", "auto"))
+    if offer_install():
+        return 0
     dlg = LoginDialog()
     if dlg.exec() != QDialog.Accepted:
         return 0

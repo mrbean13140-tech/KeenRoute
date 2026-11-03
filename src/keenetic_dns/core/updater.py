@@ -82,15 +82,27 @@ def can_self_update() -> bool:
 
 
 def install_and_restart(new_exe: Path) -> None:
-    """Подменяет текущий exe новым после выхода программы и запускает его. Вызывающий должен сразу закрыть приложение."""
+    """После выхода программы подменяет exe новым (с повторами) и запускает его. Лог: %APPDATA%\\KeenRoute\\logs\\update.log.
+    PyInstaller-onefile работает двумя процессами (загрузчик + Python) — ждём оба, иначе файл занят."""
+    from .install import _q, create_shortcuts, installed_exe  # noqa: F401
+    from .io import app_dir
     cur = Path(sys.executable)
-    script = Path(tempfile.gettempdir()) / "keenroute_update.cmd"
-    script.write_text(
-        "@echo off\r\n"
-        f"set PID={os.getpid()}\r\n"
-        ":wait\r\n"
-        'tasklist /FI "PID eq %PID%" | find "%PID%" >nul && (timeout /t 1 /nobreak >nul & goto wait)\r\n'
-        f'move /y "{new_exe}" "{cur}" >nul\r\n'
-        f'start "" "{cur}"\r\n'
-        'del "%~f0"\r\n', encoding="cp866")
-    subprocess.Popen(["cmd", "/c", str(script)], creationflags=0x08000000 | 0x00000008, close_fds=True)
+    log = app_dir() / "logs" / "update.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    pids = ",".join(str(x) for x in {os.getpid(), os.getppid()})
+    ps = (
+        f"$log = {_q(log)};"
+        "function L($m){ Add-Content -Path $log -Value ((Get-Date -Format s) + ' ' + $m) };"
+        f"L 'start update {cur} <- {new_exe}';"
+        f"Wait-Process -Id {pids} -Timeout 30 -ErrorAction SilentlyContinue;"
+        "$ok = $false;"
+        "for ($i = 0; $i -lt 40 -and -not $ok; $i++) {"
+        f"  try {{ Copy-Item -LiteralPath {_q(new_exe)} -Destination {_q(cur)} -Force -ErrorAction Stop; $ok = $true }}"
+        "  catch { Start-Sleep -Milliseconds 500 } };"
+        "if ($ok) { L 'replaced' } else { L 'replace FAILED' };"
+        f"Remove-Item -LiteralPath {_q(new_exe)} -ErrorAction SilentlyContinue;"
+        f"Start-Process -FilePath {_q(cur)} -WorkingDirectory {_q(cur.parent)};"
+        "L 'started'"
+    )
+    subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                      "-Command", ps], creationflags=0x08000000 | 0x00000008, close_fds=True)

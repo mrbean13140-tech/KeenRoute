@@ -50,6 +50,10 @@ class UpdateDialog(QDialog):
         close = QPushButton("Закрыть")
         close.clicked.connect(self.accept)
         row.addWidget(self.b_check)
+        self.b_lnk = QPushButton("Ярлык на рабочий стол")
+        self.b_lnk.setToolTip("Установить в постоянную папку и создать ярлыки на рабочем столе и в меню «Пуск»")
+        self.b_lnk.clicked.connect(self.make_shortcut)
+        row.addWidget(self.b_lnk)
         row.addStretch(1)
         row.addWidget(close)
         row.addWidget(self.b_install)
@@ -87,6 +91,23 @@ class UpdateDialog(QDialog):
             self.b_install.setEnabled(True)
         else:
             self.state.setText(f"У вас последняя версия ({rel.version}).")
+
+    def make_shortcut(self):
+        from ..core import install as I
+        if not I.current_exe():
+            return QMessageBox.information(self, "Ярлык", "Доступно только при запуске из exe.")
+        try:
+            if I.is_installed():
+                I.create_shortcuts(I.installed_exe())
+                return QMessageBox.information(self, "Ярлык", "Ярлыки созданы на рабочем столе и в меню «Пуск».")
+            exe = I.install()
+        except Exception as e:  # noqa: BLE001
+            return QMessageBox.warning(self, "Ярлык", f"Не получилось: {e}")
+        if QMessageBox.question(self, "Установлено",
+                                f"KeenRoute установлен в {exe.parent}, ярлыки созданы.\n"
+                                "Перезапустить из новой папки сейчас?") == QMessageBox.Yes:
+            I.launch(exe)
+            QApplication.quit()
 
     def install(self):
         if not U.can_self_update():
