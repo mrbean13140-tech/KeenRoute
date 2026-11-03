@@ -93,5 +93,12 @@ class UpdateDialog(QDialog):
     def _downloaded(self, path):
         self.bar.setValue(100)
         self.state.setText("Устанавливаю и перезапускаю…")
-        U.install_and_restart(path)
+        try:
+            U.install_and_restart(path)
+        except Exception as e:  # noqa: BLE001
+            self.b_install.setEnabled(True)
+            self.state.setText("Не удалось установить обновление")
+            return QMessageBox.warning(self, "Обновление",
+                                       f"Не удалось заменить файл программы:\n{e}\n\n"
+                                       "Скачайте KeenRoute.exe со страницы проекта вручную.")
         QApplication.quit()

@@ -22,3 +22,20 @@ def test_check_parses_release(monkeypatch):
     monkeypatch.setattr(U.requests, "get", lambda *a, **k: R())
     rel = U.check("tok")
     assert rel.version == "v0.4.20" and rel.asset_url == "api/1" and rel.size == 5
+
+
+def test_install_and_restart_rename(monkeypatch, tmp_path):
+    cur = tmp_path / "KeenRoute.exe"
+    cur.write_bytes(b"old")
+    new = tmp_path / "KeenRoute.new.exe"
+    new.write_bytes(b"new")
+    monkeypatch.setattr(U.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(U.sys, "executable", str(cur))
+    started = []
+    monkeypatch.setattr(U.subprocess, "Popen", lambda args, **k: started.append(args))
+    assert U._download_dir() == tmp_path  # качаем рядом с exe
+    U.install_and_restart(new)
+    assert cur.read_bytes() == b"new" and (tmp_path / "KeenRoute.old.exe").read_bytes() == b"old"
+    assert started == [[str(cur.resolve())]]
+    U.cleanup_old()
+    assert not (tmp_path / "KeenRoute.old.exe").exists()

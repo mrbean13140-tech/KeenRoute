@@ -63,6 +63,11 @@ def offer_install() -> bool:
 
 def main():
     setup_logging()
+    try:
+        from .core.updater import cleanup_old
+        cleanup_old()
+    except Exception:  # noqa: BLE001
+        pass
     if len(sys.argv) >= 2 and sys.argv[1] == "--dump":
         if len(sys.argv) != 5:
             print("Использование: KeenRoute --dump IP LOGIN PASSWORD")

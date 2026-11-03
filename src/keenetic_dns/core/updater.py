@@ -60,9 +60,23 @@ def check(token: str | None = None, timeout: float = 15) -> Release | None:
     return Release(j.get("tag_name", ""), j.get("body", "") or "", a["url"], a["browser_download_url"], a.get("size", 0))
 
 
+def _download_dir() -> Path:
+    """Качаем рядом с exe (тот же диск — можно переименовать), иначе во временную папку."""
+    if getattr(sys, "frozen", False):
+        d = Path(sys.executable).resolve().parent
+        try:
+            probe = d / ".keenroute_write_test"
+            probe.write_bytes(b"")
+            probe.unlink()
+            return d
+        except OSError:
+            pass
+    return Path(tempfile.gettempdir())
+
+
 def download(rel: Release, token: str | None = None, progress=None) -> Path:
     url = rel.asset_url if token else rel.download_url
-    dst = Path(tempfile.gettempdir()) / f"KeenRoute_{rel.version}.exe"
+    dst = _download_dir() / "KeenRoute.new.exe"
     with requests.get(url, headers=_headers(token, binary=True), stream=True, timeout=60) as r:
         r.raise_for_status()
         done = 0
@@ -81,28 +95,39 @@ def can_self_update() -> bool:
     return bool(getattr(sys, "frozen", False)) and sys.platform == "win32"
 
 
+def cleanup_old() -> None:
+    """При запуске: удалить остатки прошлого обновления."""
+    if not getattr(sys, "frozen", False):
+        return
+    d = Path(sys.executable).resolve().parent
+    for name in ("KeenRoute.old.exe", "KeenRoute.new.exe"):
+        try:
+            (d / name).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def install_and_restart(new_exe: Path) -> None:
-    """После выхода программы подменяет exe новым (с повторами) и запускает его. Лог: %APPDATA%\\KeenRoute\\logs\\update.log.
-    PyInstaller-onefile работает двумя процессами (загрузчик + Python) — ждём оба, иначе файл занят."""
-    from .install import _q, create_shortcuts, installed_exe  # noqa: F401
-    from .io import app_dir
-    cur = Path(sys.executable)
-    log = app_dir() / "logs" / "update.log"
-    log.parent.mkdir(parents=True, exist_ok=True)
-    pids = ",".join(str(x) for x in {os.getpid(), os.getppid()})
-    ps = (
-        f"$log = {_q(log)};"
-        "function L($m){ Add-Content -Path $log -Value ((Get-Date -Format s) + ' ' + $m) };"
-        f"L 'start update {cur} <- {new_exe}';"
-        f"Wait-Process -Id {pids} -Timeout 30 -ErrorAction SilentlyContinue;"
-        "$ok = $false;"
-        "for ($i = 0; $i -lt 40 -and -not $ok; $i++) {"
-        f"  try {{ Copy-Item -LiteralPath {_q(new_exe)} -Destination {_q(cur)} -Force -ErrorAction Stop; $ok = $true }}"
-        "  catch { Start-Sleep -Milliseconds 500 } };"
-        "if ($ok) { L 'replaced' } else { L 'replace FAILED' };"
-        f"Remove-Item -LiteralPath {_q(new_exe)} -ErrorAction SilentlyContinue;"
-        f"Start-Process -FilePath {_q(cur)} -WorkingDirectory {_q(cur.parent)};"
-        "L 'started'"
-    )
-    subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
-                      "-Command", ps], creationflags=0x08000000 | 0x00000008, close_fds=True)
+    """Подмена без внешних скриптов: запущенный exe можно переименовать (но не удалить).
+    cur → KeenRoute.old.exe, new → cur, запуск cur. Вызывающий сразу закрывает приложение."""
+    import logging
+    log = logging.getLogger(__name__)
+    cur = Path(sys.executable).resolve()
+    old = cur.with_name("KeenRoute.old.exe")
+    try:
+        old.unlink(missing_ok=True)
+    except OSError:
+        old = cur.with_name(f"KeenRoute.old{os.getpid()}.exe")
+    log.info("Обновление: %s → %s", new_exe, cur)
+    os.replace(cur, old)              # переименовать себя
+    try:
+        os.replace(new_exe, cur)      # новая версия на место старой
+    except OSError:  # другой диск (качали во временную папку) — копируем
+        import shutil
+        try:
+            shutil.copy2(new_exe, cur)
+        except OSError:
+            os.replace(old, cur)  # вернуть как было
+            raise
+    log.info("Обновление: файл заменён, запускаю новую версию")
+    subprocess.Popen([str(cur)], cwd=str(cur.parent), creationflags=0x00000008, close_fds=True)
