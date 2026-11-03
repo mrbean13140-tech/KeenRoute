@@ -63,12 +63,6 @@ def import_file(path: str | Path) -> list[Group]:
     return [Group(safe_name(p.stem), clean_list(text.splitlines()), description=p.stem)]
 
 
-def import_url(url: str, name: str) -> Group:
-    r = requests.get(url, timeout=20)
-    r.raise_for_status()
-    return Group(safe_name(name), clean_list(r.text.splitlines()), description=name)
-
-
 def backup_name(label: str) -> str:
     clean = "".join(c if c.isalnum() or c in "_-." else "_" for c in label).strip("_") or "router"
     return f"{clean[:40]}_{dt.datetime.now():%Y%m%d_%H%M%S}.txt"

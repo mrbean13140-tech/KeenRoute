@@ -183,8 +183,8 @@ class CatalogDialog(QDialog):
         self.results.addItem(it)
 
     def _add_entry(self, e: K.Entry):
-        extra = f"  ·  +{len(e.optional)} доп." if e.optional else ""
-        it = QListWidgetItem(f"{e.title}\n{e.size} записей{extra}" + (f"  ·  {e.category}" if e.category else ""))
+        extra = f"  ·  ещё {len(e.optional)} по желанию" if e.optional else ""
+        it = QListWidgetItem(f"{e.title}\n{e.size} основных{extra}" + (f"  ·  {e.category}" if e.category else ""))
         it.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
         it.setCheckState(Qt.Checked if e.key in self.checked else Qt.Unchecked)
         it.setData(Qt.UserRole, e)
@@ -254,7 +254,6 @@ class CatalogDialog(QDialog):
             rows = [(d, True, "") for d in e.domains]
             rows += [(z, False, "вся зона — экспериментально") for z in e.zones]
             rows += [(ip, e.source in ("tpl", "ripe"), "IP-подсеть") for ip in e.ips]
-            rows += [(d, False, "регион. зеркало / доп.") for d in e.optional]
             for val, on, hint in rows:
                 ch = QTreeWidgetItem([val + (f"   — {hint}" if hint else "")])
                 ch.setData(0, Qt.UserRole, val)
@@ -263,6 +262,18 @@ class CatalogDialog(QDialog):
                 if hint:
                     ch.setForeground(0, QColor(COL["muted"]))
                 top.addChild(ch)
+            if e.optional:  # всё редкое — одной свёрнутой веткой без галочек
+                more = QTreeWidgetItem([f"Дополнительно: {len(e.optional)} — региональные, редкие, защитные домены"])
+                more.setFlags(more.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
+                more.setForeground(0, QColor(COL["muted"]))
+                top.addChild(more)
+                for d in e.optional:
+                    ch = QTreeWidgetItem([d])
+                    ch.setData(0, Qt.UserRole, d)
+                    ch.setFlags(ch.flags() | Qt.ItemIsUserCheckable)
+                    ch.setCheckState(0, Qt.Unchecked)
+                    more.addChild(ch)
+                more.setExpanded(False)
             top.setExpanded(len(self.checked) <= 2)
             if e.skipped:
                 top.setToolTip(0, f"Пропущено правил-масок (regex/keyword): {e.skipped} — Keenetic их не поддерживает")
@@ -284,8 +295,12 @@ class CatalogDialog(QDialog):
         for i in range(self.tree.topLevelItemCount()):
             top = self.tree.topLevelItem(i)
             on, off = [], []
-            for j in range(top.childCount()):
-                ch = top.child(j)
+            stack = [top.child(j) for j in range(top.childCount())]
+            while stack:
+                ch = stack.pop(0)
+                if ch.childCount():
+                    stack += [ch.child(k) for k in range(ch.childCount())]
+                    continue
                 (on if ch.checkState(0) == Qt.Checked else off).append(ch.data(0, Qt.UserRole))
             out.append((top.data(0, Qt.UserRole), on, off))
         return out

@@ -104,6 +104,13 @@ class MainWindow(QMainWindow):
         ic.setPixmap(app_icon().pixmap(28, 28))
         head.addWidget(ic)
         head.addWidget(_label("KeenRoute", "title"), 1)
+        from ..core import settings as S
+        self.theme_btn = _btn("", self.toggle_theme, "icon")
+        self._theme_tip(S.load().get("theme", "auto"))
+        self.upd_small = _btn("⬆", self.open_updates, "icon", "Обновления программы")
+        for b in (self.theme_btn, self.upd_small):
+            b.setFixedSize(32, 32)
+            head.addWidget(b)
         lay.addLayout(head)
 
         card = QFrame(objectName="card")
@@ -140,19 +147,12 @@ class MainWindow(QMainWindow):
             ("⟳   Проверить обновления базы", self.check_db_updates,
              "Скачать свежую базу доменов и показать, что добавится в списки из каталога"),
             ("🛡   DNS / DoT / DoH", self.open_dns, "DNS-серверы роутера: шаблоны Cloudflare, Google, AdGuard, Яндекс…"),
-            ("⬆   Обновления программы", self.open_updates, "Проверить и установить новую версию"),
             ("⭳   Импорт из файла", self.import_dialog, "Загрузить списки из .json или .txt"),
-            ("🌐   Импорт списка из интернета", self.import_url,
-             "Скачать готовый список доменов по прямой ссылке на .txt (например, raw-файл с GitHub)"),
             ("⭱   Экспорт", self.export_dialog, "Сохранить отмеченные (или все) списки в файл"),
             ("💾   Создать бэкап", self.make_backup, "Сохранить конфигурацию роутера в файл"),
             ("↺   Восстановить из бэкапа", self.restore_backup, "Вернуть списки и маршруты из файла бэкапа"),
         ]:
             lay.addWidget(_btn(text, fn, "nav", tip))
-        from ..core import settings as S
-        self.theme_btn = _btn(self._theme_label(S.load().get("theme", "auto")), self.toggle_theme, "nav",
-                              "Переключить тему: как в Windows → тёмная → светлая")
-        lay.addWidget(self.theme_btn)
         return w
 
     def _main(self) -> QWidget:
@@ -693,12 +693,13 @@ class MainWindow(QMainWindow):
         S.save(cfg)
         theme.apply(QApplication.instance(), cfg["theme"])
         theme.dark_titlebar(self)
-        self.theme_btn.setText(self._theme_label(cfg["theme"]))
+        self._theme_tip(cfg["theme"])
         self._loaded((self.config_lines, self.groups, self.ifaces))
 
-    @staticmethod
-    def _theme_label(mode):
-        return {"auto": "◐   Тема: как в Windows", "dark": "●   Тема: тёмная", "light": "○   Тема: светлая"}[mode]
+    def _theme_tip(self, mode):
+        self.theme_btn.setText({"auto": "◐", "dark": "●", "light": "○"}[mode])
+        self.theme_btn.setToolTip({"auto": "Тема: как в Windows", "dark": "Тема: тёмная",
+                                   "light": "Тема: светлая"}[mode] + " — нажмите, чтобы сменить")
 
     # ---------- обновления программы ----------
     def _check_updates_quiet(self):
@@ -913,14 +914,6 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Импорт", f"{p}: {e}")
         if groups:
             self._import(groups)
-
-    def import_url(self):
-        url, ok = QInputDialog.getText(self, "Импорт по URL", "Ссылка на txt-список доменов:")
-        if not ok or not url:
-            return
-        name, ok = QInputDialog.getText(self, "Имя списка", "Имя:", text=url.rstrip("/").rsplit("/", 1)[-1].split(".")[0])
-        if ok:
-            run_bg(self, io.import_url, lambda g: self._import([g]), url, name, busy="Скачиваю…")
 
     def _import(self, groups: list[Group]):
         items = ["Как в файле", NONE] + [i.short for i in self.ifaces]

@@ -81,3 +81,15 @@ def test_geo_endpoint(monkeypatch):
         def run(self, cmds):
             raise RuntimeError("нет")
     assert geo.tunnel_countries(Bad(), ["Wireguard0"]) == {"Wireguard0": ""}
+
+
+def test_big_list_core_split():
+    files = {"brand": "brand.com\nbrandcdn.net\n" + "\n".join(f"junk{i}x.com" for i in range(80)) + "\ninclude:brand-sub\n",
+             "brand-sub": "brand-sub.com\nzzqx.com\n"}
+    db = K.parse_v2fly(files)
+    items, _ = K.resolve_depth(db, "brand")
+    core, rest = K.split_core(items)
+    assert core[:2] == ["brand.com", "brandcdn.net"] and "brand-sub.com" in core
+    assert "junk1x.com" in rest and "zzqx.com" in rest and len(core) <= K.CORE_LIMIT
+    small = [(f"d{i}.com", 0, "x") for i in range(10)]
+    assert K.split_core(small) == ([f"d{i}.com" for i in range(10)], [])

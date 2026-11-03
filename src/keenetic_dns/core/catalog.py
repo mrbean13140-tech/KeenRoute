@@ -135,17 +135,80 @@ def parse_v2fly(files: dict[str, str]) -> dict[str, dict]:
 
 
 def resolve(db: dict[str, dict], name: str, _seen=None) -> tuple[list[str], int]:
+    d, s = resolve_depth(db, name, _seen)
+    return [x for x, *_ in d], s
+
+
+def resolve_depth(db: dict[str, dict], name: str, _seen=None, depth: int = 0, origin: str = "") \
+        -> tuple[list[tuple[str, int, str]], int]:
+    """Как resolve, но для каждого домена: глубина и из какого списка он пришёл (apple, icloud, beats…)."""
     _seen = _seen if _seen is not None else set()
     if name in _seen or name not in db:
         return [], 0
     _seen.add(name)
     rec = db[name]
-    domains, skipped = list(rec["domains"]), rec["skipped"]
+    domains, skipped = [(x, depth, name) for x in rec["domains"]], rec["skipped"]
     for inc in rec["include"]:
-        d, s = resolve(db, inc, _seen)
+        d, s = resolve_depth(db, inc, _seen, depth + 1)
         domains += d
         skipped += s
     return domains, skipped
+
+
+GENERIC_TLD = {"com", "net", "org", "io", "co", "app", "dev", "ai", "me", "tv", "cloud", "gg", "so", "to", "ly", "link"}
+INFRA_HINTS = ("cdn", "static", "img", "api", "media", "video", "assets", "content", "edge", "auth", "cloud", "push")
+CORE_LIMIT = 60      # списки не больше этого берутся целиком
+SUB_LIMIT = 15       # у больших — не больше стольких основных доменов на подсервис
+
+
+def _sld_tld(d: str) -> tuple[str, str]:
+    p = d.split(".")
+    if len(p) >= 3 and p[-2] in ("co", "com", "org", "net", "gov", "edu") and len(p[-1]) == 2:
+        return p[-3], "cc"
+    return (p[-2] if len(p) > 1 else p[0]), p[-1]
+
+
+def _token(name: str) -> str:
+    return re.split(r"[-@!:]", name)[0]
+
+
+def core_score(d: str, token: str) -> int:
+    """< 0 — не основной. Чем больше, тем важнее."""
+    sld, tld = _sld_tld(d)
+    brand = bool(token) and token in sld
+    infra = any(h in sld for h in INFRA_HINTS)
+    if not (brand or infra) or "xn--" in d:
+        return -1
+    s = 6 if sld == token else (3 if brand else 2)
+    if tld in ("com", "net"):
+        s += 2
+    elif tld in GENERIC_TLD:
+        s += 1
+    elif tld == "cc" or len(tld) == 2:
+        s -= 3          # региональные зоны
+    else:
+        s -= 2          # экзотические gTLD (.hamburg, .wang…) — защитные регистрации
+    if len(sld) > 14:
+        s -= 2          # длинные промо-домены
+    return s
+
+
+def split_core(items: list[tuple[str, int, str]]) -> tuple[list[str], list[str]]:
+    """Делит домены на основные (по умолчанию отмечены) и дополнительные."""
+    order = list(dict.fromkeys(d for d, _, _ in items))
+    if len(order) <= CORE_LIMIT:
+        return order, []
+    origin = {}
+    for d, _, src in items:
+        origin.setdefault(d, src)
+    core = []
+    for src in dict.fromkeys(src for _, _, src in items):
+        tok = _token(src)
+        cand = [d for d in order if origin[d] == src and core_score(d, tok) >= 2]
+        cand.sort(key=lambda d: (-core_score(d, tok), len(d), d))
+        core += cand[:SUB_LIMIT]
+    core = list(dict.fromkeys(core))[:CORE_LIMIT]
+    return core, [d for d in order if d not in set(core)]
 
 
 class DomainDB:
@@ -194,11 +257,13 @@ class DomainDB:
     def entry(self, name: str) -> Entry | None:
         if name not in self.data:
             return None
-        domains, skipped = resolve(self.data, name)
-        main, regional = split_regional(compact(domains))
+        items, skipped = resolve_depth(self.data, name)
+        kept = set(compact([d for d, _, _ in items]))
+        main, regional = split_regional([d for d in dict.fromkeys(d for d, _, _ in items) if d in kept])
         zones = [d for d in main if "." not in d]  # целые зоны (.youtube) — только по желанию
-        main, regional = [d for d in main if "." in d], zones + regional
-        return Entry(name, name, "v2fly", "База", main, optional=regional, skipped=skipped)
+        keep = set(main) - set(zones)
+        core, rest = split_core([x for x in items if x[0] in keep])
+        return Entry(name, name, "v2fly", "База", core, optional=zones + rest + regional, skipped=skipped)
 
     def search(self, q: str, limit: int = 40) -> list[Entry]:
         q = q.strip().lower()

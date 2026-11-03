@@ -67,6 +67,8 @@ QPushButton:disabled {{ color: {C['muted']}; }}
 QPushButton#primary {{ background: {C['accent']}; border: 1px solid {C['accent']}; color: white; font-weight: 600; }}
 QPushButton#primary:hover {{ background: {C['accent2']}; }}
 QPushButton#danger {{ color: {C['bad']}; }}
+QPushButton#icon {{ background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 0; font-size: 12pt; }}
+QPushButton#icon:hover {{ background: {C['card']}; border: 1px solid {C['border']}; }}
 QPushButton#nav {{
     background: transparent; border: none; border-radius: 6px; text-align: left; padding: 8px 12px;
 }}
