@@ -14,6 +14,7 @@ from ..core import catalog as K
 from ..core.io import safe_name
 from ..core.model import NAME_RE, Group, normalize_entry
 from .common import run_quiet
+from .icons import lead_icon, set_icon
 from .theme import C as COL
 from .theme import app_icon, dark_titlebar
 
@@ -55,7 +56,8 @@ class CatalogDialog(QDialog):
         ll.setContentsMargins(14, 16, 14, 12)
         ll.setSpacing(8)
         ll.addWidget(QLabel("Каталог", objectName="title"))
-        self.q = QLineEdit(placeholderText="🔍  Сервис или домен: youtube, coral, chatgpt.com…")
+        self.q = QLineEdit(placeholderText="Сервис или домен: youtube, coral, chatgpt.com…")
+        lead_icon(self.q, "search")
         self._timer = QTimer(self, singleShot=True, interval=200)
         self._timer.timeout.connect(self._search)
         self.q.textChanged.connect(lambda: self._timer.start())
@@ -69,7 +71,8 @@ class CatalogDialog(QDialog):
         self.db_label.setWordWrap(True)
         row.addWidget(self.db_label, 1)
         ll.addLayout(row)
-        self.b_upd = QPushButton("⟳  Обновить базу")
+        self.b_upd = QPushButton("Обновить базу")
+        set_icon(self.b_upd, "refresh")
         self.b_upd.setToolTip("Скачать свежую базу доменов (нужен интернет)")
         self.b_upd.clicked.connect(self._update_db)
         ll.addWidget(self.b_upd)
@@ -172,7 +175,8 @@ class CatalogDialog(QDialog):
             self._search()
             n = self.pending_updates()
             if n:
-                self.b_apply_upd.setText(f"＋  Новые домены для списков: {n}")
+                self.b_apply_upd.setText(f"Новые домены для списков: {n}")
+                set_icon(self.b_apply_upd, "plus", "primary")
                 self.b_apply_upd.setVisible(True)
 
         def fail(msg):

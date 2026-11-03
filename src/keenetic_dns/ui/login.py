@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QFormLayout, QFrame, QHBoxLay
 
 from ..api.rci import RCIClient
 from ..core.io import app_dir
+from .icons import lead_icon, set_icon
 from .theme import C as COL
 from .theme import app_icon, dark_titlebar
 
@@ -146,7 +147,8 @@ class LoginDialog(QDialog):
         th.addWidget(QLabel("KeenRoute", objectName="title"), 1)
         sl.addLayout(th)
         sl.addWidget(QLabel("СОХРАНЁННЫЕ РОУТЕРЫ", objectName="caption"))
-        self.search = QLineEdit(placeholderText="🔍  Поиск")
+        self.search = QLineEdit(placeholderText="Поиск")
+        lead_icon(self.search, "search")
         self.search.textChanged.connect(self._fill)
         sl.addWidget(self.search)
         self.list = QListWidget()
@@ -157,7 +159,8 @@ class LoginDialog(QDialog):
         self.empty = QLabel("Пока пусто.\nЗаполните форму справа\nи нажмите «Сохранить».", objectName="muted")
         self.empty.setAlignment(Qt.AlignCenter)
         sl.addWidget(self.empty)
-        b = QPushButton("＋  Новый роутер")
+        b = QPushButton("Новый роутер")
+        set_icon(b, "plus")
         b.setCursor(Qt.PointingHandCursor)
         b.clicked.connect(self._new)
         sl.addWidget(b)
@@ -208,7 +211,8 @@ class LoginDialog(QDialog):
         save = QPushButton("Сохранить")
         save.clicked.connect(self._save)
         row.addWidget(save)
-        go = QPushButton("Подключиться  →", objectName="primary")
+        go = QPushButton("Подключиться", objectName="primary")
+        set_icon(go, "check", "primary")
         go.setDefault(True)
         go.clicked.connect(self._connect)
         row.addWidget(go)

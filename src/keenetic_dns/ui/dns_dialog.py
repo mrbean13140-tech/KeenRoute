@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit
 
 from ..core import dns as D
 from ..core.model import normalize_entry
+from .icons import set_icon
 from .theme import C as COL
 
 
@@ -48,7 +49,8 @@ class DnsPanel(QWidget):
         row = QHBoxLayout()
         self.limit = QLabel("", objectName="h2")
         row.addWidget(self.limit, 1)
-        rm = QPushButton("🗑  Удалить", objectName="danger")
+        rm = QPushButton("Удалить", objectName="danger")
+        set_icon(rm, "trash", "danger")
         rm.setToolTip("Отметить выделенный сервер или домен на удаление")
         rm.clicked.connect(self._remove_selected)
         row.addWidget(rm)

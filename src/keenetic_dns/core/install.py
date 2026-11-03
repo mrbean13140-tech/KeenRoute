@@ -81,4 +81,9 @@ def clean_env() -> dict:
 
 
 def launch(exe: Path) -> None:
-    subprocess.Popen([str(exe)], cwd=str(exe.parent), env=clean_env(), creationflags=0x00000008, close_fds=True)
+    """Запуск как двойным кликом: через проводник (его окружение, а не наше). Запасной вариант — напрямую
+    с очищенным окружением."""
+    try:
+        subprocess.Popen(["explorer.exe", str(exe)], env=clean_env(), close_fds=True)
+    except OSError:
+        subprocess.Popen([str(exe)], cwd=str(exe.parent), env=clean_env(), creationflags=0x00000008, close_fds=True)

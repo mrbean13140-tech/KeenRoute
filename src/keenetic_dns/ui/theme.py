@@ -50,16 +50,18 @@ def _qss(C) -> str:
 * {{ font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; font-size: 10pt; color: {C['text']}; }}
 QMainWindow, QDialog, QWidget#central {{ background: {C['bg']}; }}
 QWidget#sidebar {{ background: {C['side']}; border-right: 1px solid {C['border']}; }}
-QLabel#title {{ font-size: 15pt; font-weight: 600; }}
+QLabel#title {{ font-size: 16pt; font-weight: 600; }}
+QLabel#brand {{ font-size: 12.5pt; font-weight: 700; }}
 QLabel#h2 {{ font-size: 11pt; font-weight: 600; }}
 QLabel#muted, QLabel#caption {{ color: {C['muted']}; }}
 QLabel#caption {{ font-size: 8.5pt; font-weight: 600; letter-spacing: 1px; }}
 QFrame#card {{ background: {C['card']}; border: 1px solid {C['border']}; border-radius: 10px; }}
-QFrame#actionbar {{ background: {C['card']}; border: 1px solid {C['accent']}; border-radius: 10px; }}
+QFrame#actionbar {{ background: {C['card']}; border: 1px solid {C['border']}; border-left: 3px solid {C['accent']};
+                    border-radius: 12px; }}
 
 QPushButton {{
-    background: {C['card']}; border: 1px solid {C['border']}; border-radius: 6px;
-    padding: 6px 14px; min-height: 20px;
+    background: {C['card']}; border: 1px solid {C['border']}; border-radius: 8px;
+    padding: 7px 14px; min-height: 20px; icon-size: 16px;
 }}
 QPushButton:hover {{ background: {C['card2']}; }}
 QPushButton:pressed {{ background: {C['border']}; }}
@@ -70,12 +72,12 @@ QPushButton#danger {{ color: {C['bad']}; }}
 QPushButton#icon {{ background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 0; font-size: 12pt; }}
 QPushButton#icon:hover {{ background: {C['card']}; border: 1px solid {C['border']}; }}
 QPushButton#nav {{
-    background: transparent; border: none; border-radius: 6px; text-align: left; padding: 8px 12px;
+    background: transparent; border: none; border-radius: 8px; text-align: left; padding: 9px 12px; icon-size: 18px;
 }}
 QPushButton#nav:hover {{ background: {C['card']}; }}
 
 QLineEdit, QSpinBox, QComboBox, QPlainTextEdit {{
-    background: {C['card']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 6px 8px;
+    background: {C['card']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 7px 9px;
     selection-background-color: {C['accent']};
 }}
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus {{ border-bottom: 2px solid {C['accent']}; }}
@@ -88,7 +90,12 @@ QTableWidget {{
     background: {C['bg']}; border: none; gridline-color: transparent; outline: 0;
     alternate-background-color: {C['bg']};
 }}
-QTableWidget::item {{ padding: 6px; border-bottom: 1px solid {C['border']}; }}
+QTableWidget::item {{ padding: 6px 8px; border-bottom: 1px solid {C['border']}; }}
+QTreeWidget {{ background: {C['card']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; outline: 0; }}
+QTreeWidget::item {{ padding: 5px 4px; border-radius: 6px; }}
+QTreeWidget::item:hover {{ background: {C['card2']}; }}
+QTreeWidget::item:selected {{ background: {C['card2']}; color: {C['text']}; }}
+QStatusBar QLabel {{ color: {C['muted']}; }}
 QTableWidget::item:selected {{ background: {C['card2']}; color: {C['text']}; }}
 QTableWidget::item:hover {{ background: {C['card']}; }}
 QHeaderView::section {{

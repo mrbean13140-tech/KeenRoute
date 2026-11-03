@@ -23,6 +23,7 @@ from ..core.model import (NAME_RE, Group, Iface, clean_list, normalize_entry, pa
 from .common import PreviewDialog, run_bg
 from .theme import C as COL
 from .flow import FlowLayout
+from .icons import icon, lead_icon, refresh_icons, set_icon
 from .widgets import DomainHighlighter, GatewayList, Toast
 from .theme import app_icon, dark_titlebar
 
@@ -32,10 +33,12 @@ ALL, NOGW = "__all__", "__none__"
 COL_CHK, COL_NAME, COL_CNT, COL_GW, COL_ST = range(5)
 
 
-def _btn(text, fn, obj=None, tip=None):
+def _btn(text, fn, obj=None, tip=None, ic=None):
     b = QPushButton(text)
     if obj:
         b.setObjectName(obj)
+    if ic:
+        set_icon(b, ic, obj if obj in ("primary", "danger") else None)
     if tip:
         b.setToolTip(tip)
     b.setCursor(Qt.PointingHandCursor)
@@ -102,8 +105,8 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.setObjectName("pages")
-        self.tabs.addTab(routing, "🧭  Маршрутизация DNS")
-        self.tabs.addTab(self.dns_panel, "🔒  DoT / DoH")
+        self.tabs.addTab(routing, icon("route"), "Маршрутизация DNS")
+        self.tabs.addTab(self.dns_panel, icon("lock"), "DoT / DoH")
         self.tabs.currentChanged.connect(self._on_tab)
         split.addWidget(self.tabs)
         split.setStretchFactor(0, 0)
@@ -123,12 +126,12 @@ class MainWindow(QMainWindow):
         ic = QLabel()
         ic.setPixmap(app_icon().pixmap(28, 28))
         head.addWidget(ic)
-        head.addWidget(_label("KeenRoute", "title"), 1)
+        head.addWidget(_label("KeenRoute", "brand"), 1)
         from ..core import settings as S
-        self.theme_btn = _btn("", self.toggle_theme, "icon")
+        self.theme_btn = _btn("", self.toggle_theme, "icon", ic="theme")
         self._theme_tip(S.load().get("theme", "auto"))
-        self.upd_small = _btn("⬆", self.open_updates, "icon", "Обновления программы")
-        self.lnk_btn = _btn("🖥", self.make_shortcut, "icon", "Ярлык на рабочий стол и в меню «Пуск»")
+        self.upd_small = _btn("", self.open_updates, "icon", "Обновления программы", ic="update")
+        self.lnk_btn = _btn("", self.make_shortcut, "icon", "Ярлык на рабочий стол и в меню «Пуск»", ic="monitor")
         for b in (self.lnk_btn, self.theme_btn, self.upd_small):
             b.setFixedSize(32, 32)
             head.addWidget(b)
@@ -144,7 +147,7 @@ class MainWindow(QMainWindow):
         cl.addWidget(self.router_name)
         cl.addWidget(self.router_info)
         cl.addSpacing(6)
-        cl.addWidget(_btn("⇄  Сменить роутер", self.switch_router))
+        cl.addWidget(_btn("Сменить роутер", self.switch_router, ic="swap"))
         self._show_router()
         lay.addWidget(card)
 
@@ -167,14 +170,14 @@ class MainWindow(QMainWindow):
         self.route_spacer.hide()
 
         lay.addWidget(_label("ДЕЙСТВИЯ", "caption"))
-        for text, fn, tip in [
-            ("📚   Каталог сервисов", self.open_catalog, "Шаблоны и поиск по базе доменов"),
-            ("⭳   Импорт из файла", self.import_dialog, "Загрузить списки из .json или .txt"),
-            ("⭱   Экспорт в файл", self.export_dialog, "Сохранить отмеченные (или все) списки в файл"),
-            ("💾   Создать бэкап", self.make_backup, "Сохранить конфигурацию роутера в файл"),
-            ("↺   Восстановить из бэкапа", self.restore_backup, "Вернуть списки и маршруты из файла бэкапа"),
+        for ic, text, fn, tip in [
+            ("catalog", "Каталог сервисов", self.open_catalog, "Шаблоны и поиск по базе доменов"),
+            ("import", "Импорт из файла", self.import_dialog, "Загрузить списки из .json или .txt"),
+            ("export", "Экспорт в файл", self.export_dialog, "Сохранить отмеченные (или все) списки в файл"),
+            ("save", "Создать бэкап", self.make_backup, "Сохранить конфигурацию роутера в файл"),
+            ("restore", "Восстановить из бэкапа", self.restore_backup, "Вернуть списки и маршруты из файла бэкапа"),
         ]:
-            lay.addWidget(_btn(text, fn, "nav", tip))
+            lay.addWidget(_btn(text, fn, "nav", tip, ic=ic))
         return w
 
     def _main(self) -> QWidget:
@@ -194,21 +197,31 @@ class MainWindow(QMainWindow):
 
         tools = QWidget()
         fl = FlowLayout(tools)
-        self.search = QLineEdit(placeholderText="🔍  Поиск по спискам и доменам")
+        self.search = QLineEdit(placeholderText="Поиск по спискам и доменам")
+        lead_icon(self.search, "search")
         self.search.setMinimumWidth(240)
         self.search.textChanged.connect(self._apply_filter)
         self.chk_all = QCheckBox("Выбрать все")
         self.chk_all.setCursor(Qt.PointingHandCursor)
         self.chk_all.clicked.connect(self._check_all)
-        self.check = QLineEdit(placeholderText="🧭  Проверить домен: куда пойдёт?")
+        self.check = QLineEdit(placeholderText="Проверить домен: куда пойдёт?")
+        lead_icon(self.check, "compass")
         self.check.setMinimumWidth(220)
         self.check.returnPressed.connect(lambda: self.check_domain(self.check.text()))
-        for wd in (self.search, self.check, _btn("⟳  Обновить", self.refresh), _btn("📚  Каталог", self.open_catalog, "primary", "Добавить сервисы из шаблонов и базы доменов"),
-                   _btn("＋  Новый список", self.new_group),
-                   _btn("Разбить большие", self.split_big, tip="Разделить списки, превышающие лимит доменов"),
-                   self.chk_all):
+        for wd in (_btn("Каталог", self.open_catalog, "primary", "Добавить сервисы из шаблонов и базы доменов",
+                        ic="catalog"),
+                   _btn("Новый список", self.new_group, ic="plus"),
+                   _btn("Разбить большие", self.split_big, tip="Разделить списки, превышающие лимит доменов",
+                        ic="split"),
+                   self.search, self.check,
+                   _btn("Обновить", self.refresh, tip="Перечитать роутер", ic="refresh")):
             fl.addWidget(wd)
         lay.addWidget(tools)
+        sel = QHBoxLayout()
+        sel.setContentsMargins(4, 4, 0, 0)
+        sel.addWidget(self.chk_all)
+        sel.addStretch(1)
+        lay.addLayout(sel)
 
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["", "СПИСОК", "ДОМЕНОВ", "ШЛЮЗ", "СТАТУС"])
@@ -222,7 +235,7 @@ class MainWindow(QMainWindow):
         self.table.setTextElideMode(Qt.ElideRight)
         self.table.setWordWrap(False)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.verticalHeader().setDefaultSectionSize(44)
         self.table.setShowGrid(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -258,8 +271,8 @@ class MainWindow(QMainWindow):
             _btn("Назначить шлюз", self.assign_selected, "primary", "Назначить выбранный шлюз отмеченным спискам"),
             _btn("Снять шлюз", self.unassign_selected),
             _btn("Разделение…", self.split_dialog, tip="Распределить отмеченные списки по разным шлюзам"),
-            _btn("Экспорт", self.export_dialog),
-            _btn("Удалить", self.delete_groups, "danger"),
+            _btn("Экспорт", self.export_dialog, ic="export"),
+            _btn("Удалить", self.delete_groups, "danger", ic="trash"),
         ]
         for b in self.sel_buttons:
             bf.addWidget(b)
@@ -728,11 +741,13 @@ class MainWindow(QMainWindow):
         S.save(cfg)
         theme.apply(QApplication.instance(), cfg["theme"])
         theme.dark_titlebar(self)
+        refresh_icons(self)
+        self.tabs.setTabIcon(0, icon("route"))
+        self.tabs.setTabIcon(1, icon("lock"))
         self._theme_tip(cfg["theme"])
         self._loaded((self.config_lines, self.groups, self.ifaces))
 
     def _theme_tip(self, mode):
-        self.theme_btn.setText({"auto": "◐", "dark": "●", "light": "○"}[mode])
         self.theme_btn.setToolTip({"auto": "Тема: как в Windows", "dark": "Тема: тёмная",
                                    "light": "Тема: светлая"}[mode] + " — нажмите, чтобы сменить")
 
