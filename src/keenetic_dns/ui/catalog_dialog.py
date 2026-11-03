@@ -6,7 +6,7 @@ import re
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QButtonGroup, QComboBox, QDialog, QFrame, QHBoxLayout, QInputDialog, QLabel,
+from PySide6.QtWidgets import (QButtonGroup, QComboBox, QDialog, QFrame, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QRadioButton,
                                QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
@@ -33,7 +33,7 @@ class CatalogDialog(QDialog):
         self.groups, self.ifaces, self.db, self.templates = groups, ifaces, db, templates
         self.default_gw = default_gw
         self.checked: dict[str, K.Entry] = {}   # key → Entry
-        self.extra: list[K.Entry] = []           # найденные через RIPE / введённые вручную
+        self.extra: list[K.Entry] = []           # введённые вручную
         self.result = []
         self._build()
         self._search()
@@ -62,10 +62,6 @@ class CatalogDialog(QDialog):
         self.results.itemChanged.connect(self._on_result_check)
         self.results.currentItemChanged.connect(self._on_result_pick)
         ll.addWidget(self.results, 1)
-        b_ripe = QPushButton("🌐  IP-подсети компании (RIPE)…")
-        b_ripe.setToolTip("Найти автономную систему компании и её IP-подсети. Нужен интернет.")
-        b_ripe.clicked.connect(self._ripe)
-        ll.addWidget(b_ripe)
         row = QHBoxLayout()
         self.db_label = QLabel("", objectName="muted")
         self.db_label.setWordWrap(True)
@@ -222,7 +218,7 @@ class CatalogDialog(QDialog):
                 self._add_entry(K.Entry(d, d, "manual", "Вручную", [] if re.match(r"^\d", d) else [d],
                                         [d] if re.match(r"^\d", d) else []))
             elif not tpl and not found:
-                self._add_header("Ничего не найдено. Попробуйте домен сервиса или «IP-подсети компании».")
+                self._add_header("Ничего не найдено. Введите домен сервиса (например coral.ai) — его можно добавить как есть.")
         self.results.blockSignals(False)
 
     def _on_result_check(self, it: QListWidgetItem):
@@ -231,7 +227,7 @@ class CatalogDialog(QDialog):
             return
         if it.checkState() == Qt.Checked:
             self.checked[e.key] = e
-            if e.source in ("manual", "ripe") and e not in self.extra:
+            if e.source == "manual" and e not in self.extra:
                 self.extra.append(e)
         else:
             self.checked.pop(e.key, None)
@@ -253,7 +249,7 @@ class CatalogDialog(QDialog):
             self.tree.addTopLevelItem(top)
             rows = [(d, True, "") for d in e.domains]
             rows += [(z, False, "вся зона — экспериментально") for z in e.zones]
-            rows += [(ip, e.source in ("tpl", "ripe"), "IP-подсеть") for ip in e.ips]
+            rows += [(ip, e.source in ("tpl", "manual"), "IP-подсеть") for ip in e.ips]
             for val, on, hint in rows:
                 ch = QTreeWidgetItem([val + (f"   — {hint}" if hint else "")])
                 ch.setData(0, Qt.UserRole, val)
@@ -319,64 +315,6 @@ class CatalogDialog(QDialog):
         self.new_title.setVisible(new)
         self.new_name.setVisible(new)
 
-    # ---------- IP-подсети ----------
-    def _ripe(self):
-        q, ok = QInputDialog.getText(
-            self, "IP-подсети сервиса",
-            "Домен сервиса (лучше всего, например coral.ai) или название компании латиницей:",
-            text=self.q.text().strip())
-        q = q.strip().lower()
-        if not ok or not q:
-            return
-        if "." in q:
-            self.db_label.setText(f"Определяю сети {q}…")
-            run_quiet(K.find_ips_for_domain, lambda res: self._ips_found(q, res), self._ripe_fail, q)
-            return
-        self.db_label.setText("Ищу компанию в RIPE…")
-
-        def pick(found):
-            self._show_db_status()
-            if not found:
-                return QMessageBox.information(self, "RIPE", "Компания не найдена. Попробуйте ввести домен сервиса.")
-            items = [f"{a} — {d}" for a, d in found]
-            choice, ok2 = QInputDialog.getItem(self, "RIPE", "Выберите автономную систему:", items, 0, False)
-            if not ok2:
-                return
-            asn, desc = found[items.index(choice)]
-            self.db_label.setText(f"Загружаю подсети {asn}…")
-            run_quiet(K.ripe_prefixes,
-                      lambda pfx: self._ips_found(q, [K.IpFinding(asn, desc, asn[2:] in K.SHARED_ASN, pfx)]),
-                      self._ripe_fail, asn)
-
-        run_quiet(K.ripe_search, pick, self._ripe_fail, q)
-
-    def _ips_found(self, q, findings):
-        self._show_db_status()
-        findings = [f for f in findings if f.prefixes]
-        if not findings:
-            return QMessageBox.information(self, "IP-подсети", f"Для «{q}» не найдено IPv4-подсетей.")
-        notes = []
-        for f in findings:
-            title = f"IP {q}: {f.holder or f.asn} ({f.asn})"
-            note = ""
-            if f.shared:
-                note = (f"{f.holder or f.asn} — общее облако/CDN: вся сеть не добавляется, "
-                        f"только адреса самого сайта ({len(f.prefixes)}). Они могут меняться.")
-                notes.append(note)
-            elif len(f.prefixes) > 300:
-                notes.append(f"{f.asn}: {len(f.prefixes)} подсетей — это много, оставьте только нужные.")
-            e = K.Entry(f"{q}-{f.asn.lower()}", title, "ripe", "IP", ips=f.prefixes, note=note)
-            self.extra.append(e)
-            self.checked[e.key] = e
-        self._search()
-        self._render()
-        if notes:
-            QMessageBox.information(self, "IP-подсети", "\n\n".join(notes))
-
-    def _ripe_fail(self, msg):
-        self._show_db_status()
-        QMessageBox.warning(self, "IP-подсети", f"Не удалось получить данные:\n{msg}")
-
     # ---------- результат ----------
     def _accept(self):
         sel = [(e, on, off) for e, on, off in self._selection() if on]
@@ -386,7 +324,7 @@ class CatalogDialog(QDialog):
         self.result = []
         if self.m_sep.isChecked():
             for e, on, off in sel:
-                name = safe_name(e.id if e.source != "ripe" else e.id.lower())
+                name = safe_name(e.id)
                 self.result.append((self._group(name, e.title, on, gw, [z for z in e.zones if z in on]),
                                     [(e.key, off)]))
         else:
