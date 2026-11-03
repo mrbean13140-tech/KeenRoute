@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
                                QScrollArea, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..core import dns as D
@@ -21,7 +21,7 @@ class DnsPanel(QWidget):
         self.providers, self.on_apply = providers, on_apply
         self.add: list[D.Upstream] = []
         self.remove: list[D.Upstream] = []
-        self.boxes: list[tuple[dict, str, QCheckBox]] = []
+        self.boxes: list[tuple[dict, str, QPushButton]] = []
         self._build()
 
     def _build(self):
@@ -75,6 +75,7 @@ class DnsPanel(QWidget):
             card = QFrame(objectName="card")
             cl = QHBoxLayout(card)
             cl.setContentsMargins(14, 10, 14, 10)
+            cl.setSpacing(6)
             tl = QVBoxLayout()
             tl.setSpacing(0)
             tl.addWidget(QLabel(p["title"], objectName="h2"))
@@ -83,9 +84,13 @@ class DnsPanel(QWidget):
             for kind, text, tip in [("plain", "DNS", ", ".join(p["plain"][:2])),
                                     ("dot", "DoT", f"{p['dot']['ip']} · {p['dot']['sni']}"),
                                     ("doh", "DoH", p["doh"])]:
-                cb = QCheckBox(text)
+                cb = QPushButton(text)  # переключатель-«чип»: область нажатия = видимая кнопка
+                cb.setObjectName("chip")
+                cb.setCheckable(True)
                 cb.setToolTip(tip)
                 cb.setCursor(Qt.PointingHandCursor)
+                cb.setFixedHeight(30)
+                cb.setMinimumWidth(58)
                 cl.addWidget(cb)
                 self.boxes.append((p, kind, cb))
                 cb.toggled.connect(self._update_limit)
