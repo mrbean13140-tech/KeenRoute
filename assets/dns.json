@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "providers": [
+    {"id": "cloudflare", "title": "Cloudflare", "note": "Быстрый, без фильтрации",
+     "plain": ["1.1.1.1", "1.0.0.1"], "dot": {"ip": "1.1.1.1", "sni": "cloudflare-dns.com"},
+     "doh": "https://cloudflare-dns.com/dns-query"},
+    {"id": "google", "title": "Google", "note": "Без фильтрации",
+     "plain": ["8.8.8.8", "8.8.4.4"], "dot": {"ip": "8.8.8.8", "sni": "dns.google"},
+     "doh": "https://dns.google/dns-query"},
+    {"id": "quad9", "title": "Quad9", "note": "Блокирует вредоносные сайты",
+     "plain": ["9.9.9.9", "149.112.112.112"], "dot": {"ip": "9.9.9.9", "sni": "dns.quad9.net"},
+     "doh": "https://dns.quad9.net/dns-query"},
+    {"id": "adguard", "title": "AdGuard", "note": "Блокирует рекламу и трекеры",
+     "plain": ["94.140.14.14", "94.140.15.15"], "dot": {"ip": "94.140.14.14", "sni": "dns.adguard-dns.com"},
+     "doh": "https://dns.adguard-dns.com/dns-query"},
+    {"id": "adguard-family", "title": "AdGuard Семейный", "note": "Реклама + взрослый контент, безопасный поиск",
+     "plain": ["94.140.14.15", "94.140.15.16"], "dot": {"ip": "94.140.14.15", "sni": "family.adguard-dns.com"},
+     "doh": "https://family.adguard-dns.com/dns-query"},
+    {"id": "yandex", "title": "Яндекс", "note": "Хорошо работает для российских сайтов",
+     "plain": ["77.88.8.8", "77.88.8.1"], "dot": {"ip": "77.88.8.8", "sni": "common.dot.dns.yandex.net"},
+     "doh": "https://common.dot.dns.yandex.net/dns-query"},
+    {"id": "yandex-family", "title": "Яндекс Семейный", "note": "Без взрослого контента",
+     "plain": ["77.88.8.7", "77.88.8.3"], "dot": {"ip": "77.88.8.7", "sni": "family.dot.dns.yandex.net"},
+     "doh": "https://family.dot.dns.yandex.net/dns-query"}
+  ]
+}

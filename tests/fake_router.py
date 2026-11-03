@@ -1,0 +1,91 @@
+"""Мини-эмулятор NDMS: исполняет наши CLI-команды и отдаёт running-config."""
+import re
+
+from keenetic_dns.core.model import Group, ndms_unquote, parse_running_config
+
+
+class FakeRouter:
+    base = "http://192.168.1.1:80"
+
+    def __init__(self, cfg_lines, ifaces=None, fail_on=None):
+        self.groups = parse_running_config(cfg_lines)
+        self.ifaces = ifaces or {}
+        self.fail_on = fail_on  # подстрока команды, на которой «роутер» вернёт ошибку
+        self.ran = []
+        from keenetic_dns.core.dns import parse_dns
+        self.dns = parse_dns(cfg_lines)
+
+    def interfaces(self):
+        return self.ifaces
+
+    def running_config(self):
+        out = ["system name Test"]
+        for g in self.groups.values():
+            out.append(f"object-group fqdn {g.name}")
+            if g.description:
+                out.append(f'    description "{g.description}"')
+            out += [f"    include {d}" for d in g.domains]
+            out.append("!")
+        out += [u.cmd() for u in self.dns if u.kind == "plain"]
+        out.append("dns-proxy")
+        out += ["    " + u.cmd().split(" ", 1)[1] for u in self.dns if u.kind != "plain"]
+        for g in self.groups.values():
+            if g.interface:
+                out.append(f"    route object-group {g.name} {g.interface} auto" + (" reject" if g.reject else ""))
+        out.append("!")
+        return out
+
+    def run(self, cmds):
+        from keenetic_dns.api.rci import RCIError
+        self.ran.append(cmds)
+        for c in cmds:
+            if self.fail_on and self.fail_on in c:
+                raise RCIError(f"{c}: ошибка")
+            self._exec(c)
+        return []
+
+    def _exec(self, c):
+        m = re.match(r"^(no )?object-group fqdn (\S+)(?: (include|description) ?(.*))?$", c)
+        if m:
+            neg, name, sub, arg = m.groups()
+            if not sub:
+                if neg:
+                    self.groups.pop(name, None)
+                else:
+                    self.groups.setdefault(name, Group(name))
+                return
+            g = self.groups.setdefault(name, Group(name))
+            if sub == "include":
+                if neg:
+                    g.domains = [d for d in g.domains if d != arg]
+                elif arg not in g.domains:
+                    g.domains.append(arg)
+            else:
+                g.description = "" if neg else ndms_unquote(arg)
+            return
+        m = re.match(r"^(no )?dns-proxy route object-group (\S+) (\S+)(.*)$", c)
+        if m:
+            neg, name, iface, rest = m.groups()
+            g = self.groups[name]
+            if neg:
+                g.interface, g.reject = None, False
+            else:
+                g.interface, g.reject = iface, "reject" in rest
+            return
+        from keenetic_dns.core.dns import parse_dns
+        if c.startswith(("dns-proxy tls", "dns-proxy https", "no dns-proxy tls", "no dns-proxy https",
+                         "ip name-server", "no ip name-server")):
+            neg = c.startswith("no ")
+            body = c[3:] if neg else c
+            if body.startswith("dns-proxy "):
+                u = parse_dns(["dns-proxy", "    " + body.split(" ", 1)[1], "!"])[0]
+            else:
+                u = parse_dns([body])[0]
+            if neg:
+                self.dns = [x for x in self.dns if x != u]
+            elif u not in self.dns:
+                self.dns.append(u)
+            return
+        if c == "system configuration save":
+            return
+        raise AssertionError(f"неизвестная команда: {c}")

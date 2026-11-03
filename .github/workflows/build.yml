@@ -1,0 +1,61 @@
+name: build
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots/
+      - name: Save screenshots to repo
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          mkdir -p docs/screenshots
+          cp screenshots/*.png docs/screenshots/ 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          git diff --cached --quiet || (git commit -m "Скриншоты [skip ci]" && git push) || true
+      - name: Set version
+        shell: bash
+        run: echo "__version__ = \"0.5.${{ github.run_number }}\"" > src/keenetic_dns/__init__.py
+      - name: Build exe
+        run: pyinstaller --noconfirm --onefile --windowed --name KeenRoute --icon assets/icon.ico --add-data "assets;assets" --paths src run.py
+      - name: Copy for old versions updater
+        shell: bash
+        run: cp dist/KeenRoute.exe dist/KeeneticDNS.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KeenRoute
+          path: dist/KeenRoute.exe
+      - name: Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.5.${{ github.run_number }}
+          name: KeenRoute 0.5.${{ github.run_number }}
+          body: ${{ github.event.head_commit.message }}
+          files: |
+            dist/KeenRoute.exe
+            dist/KeeneticDNS.exe
+          make_latest: true

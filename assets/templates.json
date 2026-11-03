@@ -1,0 +1,299 @@
+{
+ "version": 1,
+ "note": "Ужатые списки: Keenetic сам захватывает поддомены, поэтому указываются только основные домены. IP — только где без них сервис работает нестабильно.",
+ "templates": [
+  {
+   "id": "chatgpt",
+   "title": "ChatGPT / OpenAI",
+   "category": "ИИ",
+   "domains": [
+    "chatgpt.com",
+    "chat.com",
+    "openai.com",
+    "oaistatic.com",
+    "oaiusercontent.com",
+    "sora.com"
+   ]
+  },
+  {
+   "id": "claude",
+   "title": "Claude / Anthropic",
+   "category": "ИИ",
+   "domains": [
+    "claude.ai",
+    "claude.com",
+    "anthropic.com",
+    "claudeusercontent.com",
+    "intercom.io",
+    "intercomcdn.com",
+    "intercomassets.com"
+   ],
+   "ips": [
+    "160.79.104.0/21"
+   ]
+  },
+  {
+   "id": "gemini",
+   "title": "Gemini / AI Studio",
+   "category": "ИИ",
+   "domains": [
+    "gemini.google.com",
+    "aistudio.google.com",
+    "generativelanguage.googleapis.com"
+   ]
+  },
+  {
+   "id": "grok",
+   "title": "Grok / xAI",
+   "category": "ИИ",
+   "domains": [
+    "grok.com",
+    "x.ai"
+   ]
+  },
+  {
+   "id": "perplexity",
+   "title": "Perplexity",
+   "category": "ИИ",
+   "domains": [
+    "perplexity.ai",
+    "pplx.ai"
+   ]
+  },
+  {
+   "id": "youtube",
+   "title": "YouTube",
+   "category": "Видео",
+   "domains": [
+    "youtube.com",
+    "youtu.be",
+    "yt.be",
+    "ytimg.com",
+    "googlevideo.com",
+    "ggpht.com",
+    "youtube-nocookie.com",
+    "youtubekids.com",
+    "youtubei.googleapis.com",
+    "youtube.googleapis.com",
+    "jnn-pa.googleapis.com"
+   ]
+  },
+  {
+   "id": "netflix",
+   "title": "Netflix",
+   "category": "Видео",
+   "domains": [
+    "netflix.com",
+    "netflix.net",
+    "nflxext.com",
+    "nflximg.com",
+    "nflximg.net",
+    "nflxso.net",
+    "nflxvideo.net",
+    "nflxsearch.net",
+    "fast.com"
+   ],
+   "ips": [
+    "23.246.0.0/18",
+    "37.77.184.0/21",
+    "45.57.0.0/17",
+    "64.120.128.0/17",
+    "66.197.128.0/17",
+    "69.53.224.0/19",
+    "108.175.32.0/20",
+    "185.2.220.0/22",
+    "185.9.188.0/22",
+    "192.173.64.0/18",
+    "198.38.96.0/19",
+    "198.45.48.0/20",
+    "207.45.72.0/22",
+    "208.75.76.0/22"
+   ]
+  },
+  {
+   "id": "tiktok",
+   "title": "TikTok",
+   "category": "Видео",
+   "domains": [
+    "tiktok.com",
+    "tiktokv.com",
+    "tiktokcdn.com",
+    "tiktokcdn-us.com",
+    "byteoversea.com",
+    "ibytedtos.com",
+    "ttwstatic.com",
+    "ttlivecdn.com"
+   ]
+  },
+  {
+   "id": "telegram",
+   "title": "Telegram",
+   "category": "Мессенджеры",
+   "domains": [
+    "telegram.org",
+    "telegram.me",
+    "t.me",
+    "telegra.ph",
+    "telesco.pe",
+    "cdn-telegram.org",
+    "telegram-cdn.org",
+    "tdesktop.com",
+    "graph.org",
+    "fragment.com",
+    "contest.com",
+    "comments.app",
+    "tg.dev"
+   ],
+   "ips": [
+    "91.108.4.0/22",
+    "91.108.8.0/22",
+    "91.108.12.0/22",
+    "91.108.16.0/22",
+    "91.108.20.0/22",
+    "91.108.56.0/22",
+    "91.105.192.0/23",
+    "149.154.160.0/20",
+    "185.76.151.0/24",
+    "95.161.64.0/20"
+   ]
+  },
+  {
+   "id": "meta",
+   "title": "WhatsApp / Instagram / Facebook",
+   "category": "Мессенджеры",
+   "domains": [
+    "whatsapp.com",
+    "whatsapp.net",
+    "whatsapp.biz",
+    "wa.me",
+    "wl.co",
+    "facebook.com",
+    "facebook.net",
+    "fbcdn.net",
+    "fbsbx.com",
+    "instagram.com",
+    "cdninstagram.com",
+    "ig.me",
+    "threads.net",
+    "threads.com"
+   ],
+   "ips": [
+    "157.240.0.0/16",
+    "31.13.64.0/18",
+    "179.60.192.0/22",
+    "185.60.216.0/22",
+    "69.171.224.0/19",
+    "66.220.144.0/20",
+    "102.132.96.0/20",
+    "129.134.0.0/16",
+    "163.70.128.0/17"
+   ]
+  },
+  {
+   "id": "discord",
+   "title": "Discord",
+   "category": "Мессенджеры",
+   "domains": [
+    "discord.com",
+    "discord.gg",
+    "discordapp.com",
+    "discordapp.net",
+    "discord.media",
+    "discordcdn.com",
+    "discord.dev",
+    "discord.new",
+    "discordstatus.com",
+    "dis.gd",
+    "discord.co"
+   ]
+  },
+  {
+   "id": "x",
+   "title": "X (Twitter)",
+   "category": "Соцсети",
+   "domains": [
+    "x.com",
+    "twitter.com",
+    "twimg.com",
+    "t.co"
+   ]
+  },
+  {
+   "id": "spotify",
+   "title": "Spotify",
+   "category": "Музыка",
+   "domains": [
+    "spotify.com",
+    "scdn.co",
+    "spotifycdn.com",
+    "spotifycdn.net",
+    "pscdn.co",
+    "spoti.fi",
+    "spotilocal.com"
+   ]
+  },
+  {
+   "id": "russia",
+   "title": "Россия (напрямую через провайдера)",
+   "category": "Страны",
+   "note": "Для схемы «всё через VPN, российское — напрямую». Целые зоны ru/рф/su — экспериментально: роутер может их не принять, программа проверит и предложит откат.",
+   "zones": [
+    "ru",
+    "xn--p1ai",
+    "su"
+   ],
+   "domains": [
+    "vk.com",
+    "vk.me",
+    "vk.cc",
+    "vk.link",
+    "vk.company",
+    "vk.design",
+    "vk.team",
+    "userapi.com",
+    "mvk.com",
+    "vk-apps.com",
+    "vk-cdn.me",
+    "vk-cdn.net",
+    "vk-portal.net",
+    "vkuser.net",
+    "vkuseraudio.com",
+    "vkuseraudio.net",
+    "vkuservideo.com",
+    "vkuservideo.net",
+    "vkuserlive.net",
+    "vkcache.com",
+    "vkclips.app",
+    "vkgo.app",
+    "vklive.app",
+    "vkmessenger.app",
+    "vkmessenger.com",
+    "mradx.net",
+    "ozon.com",
+    "ozon.app",
+    "ozon.dev",
+    "ozon.global",
+    "ozon.kz",
+    "ozon.market",
+    "ozon.travel",
+    "avito.st",
+    "auto.ru",
+    "avito.ru",
+    "cdn-vk.ru",
+    "ozon.ru",
+    "ozone.ru",
+    "vk-analytics.ru",
+    "vk-apps.ru",
+    "vk.ru",
+    "vkcloud-static.ru",
+    "vkontakte.ru",
+    "vkuseraudio.ru",
+    "vkusercdn.ru",
+    "vkuserphoto.ru",
+    "vkuservideo.ru",
+    "vkvideo.ru",
+    "wildberries.ru"
+   ]
+  }
+ ]
+}
