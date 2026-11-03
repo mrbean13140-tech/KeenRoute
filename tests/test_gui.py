@@ -33,12 +33,27 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setenv("KEENETIC_DNS_NO_UPDATE_CHECK", "1")
     monkeypatch.setenv("KEENETIC_DNS_NO_GEO", "1")
     a = QApplication.instance() or QApplication([])
+    _load_windows_fonts()
     theme.apply(a)
     monkeypatch.setattr(mw.PreviewDialog, "exec", lambda self: 1)
     monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
     monkeypatch.setattr(QMessageBox, "information", staticmethod(lambda *a, **k: None))
     monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
     return a
+
+
+def _load_windows_fonts():
+    """В offscreen-режиме Qt не видит системные шрифты — подключаем вручную, иначе на скриншотах квадратики."""
+    import sys
+    if sys.platform != "win32":
+        return
+    from PySide6.QtGui import QFontDatabase
+    fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    for name in ("segoeui.ttf", "segoeuib.ttf", "seguisb.ttf", "segoeuil.ttf", "seguisym.ttf", "seguiemj.ttf",
+                 "SegUIVar.ttf", "arial.ttf"):
+        f = fonts / name
+        if f.exists():
+            QFontDatabase.addApplicationFont(str(f))
 
 
 def _wait(app):

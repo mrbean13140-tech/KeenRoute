@@ -21,6 +21,7 @@ jobs:
       - run: python -m pytest -q
         env:
           QT_QPA_PLATFORM: offscreen
+          QT_QPA_FONTDIR: C:\Windows\Fonts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
