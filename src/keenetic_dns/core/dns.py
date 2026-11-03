@@ -106,3 +106,26 @@ def verify_dns(after: list[Upstream], add: list[Upstream], remove: list[Upstream
     s = set(after)
     return [f"не добавлено: {u.label}" for u in add if u not in s] + \
            [f"не удалено: {u.label}" for u in remove if u in s]
+
+
+MAX_ENCRYPTED = 8  # help.keenetic.com: не более 8 серверов DoT/DoH на роутере
+
+
+def server_key(u: Upstream) -> tuple[str, str]:
+    """Один сервер = тип + адрес (DoT — адрес и SNI). Привязки к доменам — тот же сервер."""
+    return (u.kind, f"{u.addr}|{u.sni}" if u.kind == "dot" else u.addr)
+
+
+def encrypted_servers(ups) -> set[tuple[str, str]]:
+    return {server_key(u) for u in ups if u.kind in ("dot", "doh")}
+
+
+def provider_name(u: Upstream, providers: list[dict]) -> str:
+    for p in providers:
+        if u.kind == "doh" and u.addr == p.get("doh"):
+            return p["title"]
+        if u.kind == "dot" and (u.sni == p["dot"]["sni"] or u.addr == p["dot"]["ip"]):
+            return p["title"]
+        if u.kind == "plain" and u.addr in p.get("plain", []):
+            return p["title"]
+    return ""

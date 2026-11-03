@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-                               QListWidgetItem, QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget)
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (QCheckBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
+                               QScrollArea, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from ..core import dns as D
 from ..core.model import normalize_entry
+from .theme import C as COL
 from .theme import app_icon, dark_titlebar
 
 
@@ -38,18 +40,49 @@ class DnsDialog(QDialog):
         ll.setContentsMargins(14, 16, 14, 12)
         ll.setSpacing(8)
         ll.addWidget(QLabel("Сейчас на роутере", objectName="title"))
-        ll.addWidget(QLabel("Снимите галочку, чтобы удалить сервер.", objectName="muted"))
-        self.cur = QListWidget()
+        ll.addWidget(QLabel("Снимите галочку или выделите и нажмите «Удалить». Раскройте сервер, "
+                            "чтобы увидеть домены.", objectName="muted", wordWrap=True))
+        self.cur = QTreeWidget()
+        self.cur.setHeaderHidden(True)
+        groups: dict = {}
         for u in self.current:
-            it = QListWidgetItem(u.label)
-            it.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
-            it.setCheckState(Qt.Checked)
-            it.setData(Qt.UserRole, u)
-            it.setToolTip(u.cmd())
-            self.cur.addItem(it)
+            key = D.server_key(u) + ((u.iface,) if u.kind == "plain" else ())
+            groups.setdefault(key, []).append(u)
+        kinds = {"plain": "DNS", "dot": "DoT", "doh": "DoH"}
+        for key, ups in groups.items():
+            u0 = ups[0]
+            name = D.provider_name(u0, self.providers)
+            server = (u0.sni or u0.addr) if u0.kind == "dot" else u0.addr
+            via = f"  через {u0.iface}" if u0.iface else ""
+            doms = [u.domain for u in ups if u.domain]
+            scope = "для всех запросов" if any(not u.domain for u in ups) else f"доменов: {len(doms)}"
+            top = QTreeWidgetItem([f"{kinds[u0.kind]} · {name + ' — ' if name else ''}{server}{via}   ({scope})"])
+            top.setFlags(top.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
+            top.setCheckState(0, Qt.Checked)
+            top.setToolTip(0, server)
+            self.cur.addTopLevelItem(top)
+            for u in ups:
+                ch = QTreeWidgetItem([u.domain or "все запросы"])
+                ch.setFlags(ch.flags() | Qt.ItemIsUserCheckable)
+                ch.setCheckState(0, Qt.Checked)
+                ch.setData(0, Qt.UserRole, u)
+                top.addChild(ch)
         if not self.current:
-            self.cur.addItem(QListWidgetItem("Свои DNS не заданы — используются DNS провайдера"))
+            self.cur.addTopLevelItem(QTreeWidgetItem(["Свои DNS не заданы — используются DNS провайдера"]))
+        self.cur.itemChanged.connect(self._mark)
+        self.cur.currentItemChanged.connect(self._details)
         ll.addWidget(self.cur, 1)
+        self.info = QLabel("", objectName="muted", wordWrap=True)
+        self.info.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        ll.addWidget(self.info)
+        row = QHBoxLayout()
+        self.limit = QLabel("", objectName="h2")
+        row.addWidget(self.limit, 1)
+        rm = QPushButton("🗑  Удалить", objectName="danger")
+        rm.setToolTip("Отметить выделенный сервер или домен на удаление")
+        rm.clicked.connect(self._remove_selected)
+        row.addWidget(rm)
+        ll.addLayout(row)
         split.addWidget(left)
 
         right = QWidget(objectName="central")
@@ -83,6 +116,7 @@ class DnsDialog(QDialog):
                 cb.setCursor(Qt.PointingHandCursor)
                 cl.addWidget(cb)
                 self.boxes.append((p, kind, cb))
+                cb.toggled.connect(self._update_limit)
             il.addWidget(card)
         il.addStretch(1)
         area.setWidget(inner)
@@ -91,6 +125,7 @@ class DnsDialog(QDialog):
         row = QHBoxLayout()
         row.addWidget(QLabel("Только для доменов:", objectName="muted"))
         self.domains = QLineEdit(placeholderText="пусто — для всех запросов; или через запятую: ozon.ru, wb.ru")
+        self.domains.textChanged.connect(self._update_limit)
         row.addWidget(self.domains, 1)
         rl.addLayout(row)
 
@@ -104,14 +139,70 @@ class DnsDialog(QDialog):
         btns.addWidget(ok)
         rl.addLayout(btns)
         split.addWidget(right)
-        split.setSizes([360, 640])
+        split.setSizes([440, 560])
+        self._update_limit()
 
-    def _accept(self):
+    def _leaves(self):
+        for i in range(self.cur.topLevelItemCount()):
+            top = self.cur.topLevelItem(i)
+            for j in range(top.childCount()):
+                yield top.child(j)
+
+    def _mark(self, it, _col=0):
+        """Отмеченные на удаление — зачёркнуты красным."""
+        self.cur.blockSignals(True)  # смена шрифта сама шлёт itemChanged
+        try:
+            for x in [it] + [it.child(j) for j in range(it.childCount())] + ([it.parent()] if it.parent() else []):
+                off = x.checkState(0) == Qt.Unchecked
+                f = x.font(0)
+                f.setStrikeOut(off)
+                x.setFont(0, f)
+                x.setForeground(0, QColor(COL["bad"]) if off else QColor(COL["text"]))
+        finally:
+            self.cur.blockSignals(False)
+        self._update_limit()
+
+    def _details(self, it, _prev=None):
+        if not it:
+            return
+        u = it.data(0, Qt.UserRole)
+        if u:
+            lines = [f"Команда: {u.cmd()}", f"Тип: {u.label}"]
+        else:
+            ups = [it.child(j).data(0, Qt.UserRole) for j in range(it.childCount())]
+            ups = [x for x in ups if x]
+            lines = [f"Записей: {len(ups)}"] + [x.cmd() for x in ups[:6]] + (["…"] if len(ups) > 6 else [])
+        self.info.setText("\n".join(lines))
+
+    def _remove_selected(self):
+        it = self.cur.currentItem()
+        if it and (it.data(0, Qt.UserRole) or it.childCount()):
+            it.setCheckState(0, Qt.Unchecked)
+
+    def _planned(self):
         doms = [d for d in (normalize_entry(x) for x in self.domains.text().split(",")) if d]
-        self.add = []
+        add = []
         for p, kind, cb in self.boxes:
             if cb.isChecked():
-                self.add += D.preset_upstreams(p, kind, doms)
-        self.remove = [self.cur.item(i).data(Qt.UserRole) for i in range(self.cur.count())
-                       if self.cur.item(i).data(Qt.UserRole) and self.cur.item(i).checkState() != Qt.Checked]
+                add += D.preset_upstreams(p, kind, doms)
+        remove = [ch.data(0, Qt.UserRole) for ch in self._leaves()
+                  if ch.data(0, Qt.UserRole) and ch.checkState(0) != Qt.Checked]
+        return add, remove
+
+    def _update_limit(self, *_):
+        add, remove = self._planned()
+        after = [u for u in self.current if u not in set(remove)] + add
+        n = len(D.encrypted_servers(after))
+        self.limit.setText(f"DoT/DoH-серверов: {n} из {D.MAX_ENCRYPTED}")
+        self.limit.setStyleSheet(f"color: {COL['bad'] if n > D.MAX_ENCRYPTED else COL['text']};")
+        self.limit.setToolTip("Keenetic поддерживает не более 8 серверов DoT/DoH. Один сервер, указанный для "
+                              "нескольких доменов, считается одним.")
+        return n
+
+    def _accept(self):
+        if self._update_limit() > D.MAX_ENCRYPTED:
+            return QMessageBox.warning(self, "Лимит DoT/DoH",
+                                       f"Keenetic поддерживает не более {D.MAX_ENCRYPTED} серверов DoT/DoH.\n"
+                                       "Снимите лишние галочки в шаблонах или удалите старые серверы слева.")
+        self.add, self.remove = self._planned()
         self.accept()

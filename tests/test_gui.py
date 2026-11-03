@@ -237,7 +237,11 @@ def test_dns_dialog(app):
     for p, kind, cb in d.boxes:
         if p["id"] == "adguard-family" and kind == "dot":
             cb.setChecked(True)
-    d.cur.item(1).setCheckState(Qt.Unchecked)  # убрать 8.8.8.8
+    leaf = next(x for x in d._leaves() if x.data(0, Qt.UserRole).addr == "8.8.8.8")
+    d.cur.setCurrentItem(leaf)
+    d._remove_selected()  # убрать 8.8.8.8
+    assert leaf.font(0).strikeOut()
+    assert "из 8" in d.limit.text()
     _shot(d, "dns.png")
     d._accept()
     assert [u.sni for u in d.add] == ["family.adguard-dns.com"] and d.remove[0].addr == "8.8.8.8"
@@ -280,3 +284,16 @@ def test_design_features(app, tmp_path):
     assert not theme.is_dark()
     _shot(w, "main_light.png")
     w.toggle_theme()  # → auto
+
+
+def test_dns_limit(app):
+    from keenetic_dns.core import dns as D
+    from keenetic_dns.ui.dns_dialog import DnsDialog
+    providers = D.load_providers(str(Path(__file__).resolve().parent.parent / "assets" / "dns.json"))
+    d = DnsDialog(None, [], providers)
+    for p, kind, cb in d.boxes:
+        if kind in ("dot", "doh"):
+            cb.setChecked(True)  # 7 провайдеров × 2 = 14 > 8
+    assert d._update_limit() == 14 and "14 из 8" in d.limit.text()
+    d._accept()
+    assert d.add == []  # не принято из-за лимита

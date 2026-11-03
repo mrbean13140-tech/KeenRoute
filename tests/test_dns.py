@@ -35,3 +35,12 @@ def test_commands_roundtrip():
         line = u.cmd().replace("dns-proxy ", "    ", 1)
         assert D.parse_dns(["dns-proxy", line, "!"]) == [u]
     assert D.Upstream("plain", "1.1.1.1", iface="Wireguard2").cmd() == 'ip name-server 1.1.1.1 "" on Wireguard2'
+
+
+def test_limit_counts_servers_not_domains():
+    u = D.parse_dns(CFG)
+    # Яндекс DoT (для wbbasket) + Cloudflare DoH + Яндекс DoH (для ozon) = 3 сервера
+    assert len(D.encrypted_servers(u)) == 3
+    p = D.load_providers("assets/dns.json")
+    assert D.provider_name(D.Upstream("doh", "https://cloudflare-dns.com/dns-query"), p) == "Cloudflare"
+    assert D.provider_name(D.Upstream("dot", "77.88.8.8", "common.dot.dns.yandex.net"), p) == "Яндекс"
