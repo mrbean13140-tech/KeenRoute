@@ -48,11 +48,13 @@ jobs:
       - name: Release notes
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
+        env:
+          MSG: ${{ github.event.head_commit.message }}
         run: |
           {
-            echo "## $(git log -1 --format=%s)"
+            echo "## $(printf '%s\n' "$MSG" | head -1)"
             echo
-            git log -1 --format=%b | grep -v -E '^(Co-Authored-By|Claude-Session):' || true
+            printf '%s\n' "$MSG" | tail -n +2 | grep -v -E '^(Co-Authored-By|Claude-Session):' || true
             echo
             echo "Скачайте **KeenRoute.exe** ниже и запустите — установка не нужна."
           } > release_notes.md
