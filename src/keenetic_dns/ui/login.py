@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import uuid
 
@@ -15,6 +14,7 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QFormLayout, QFrame, QHBoxLay
 from ..api.rci import RCIClient
 from ..core.io import app_dir
 from .icons import lead_icon, set_icon
+from .common import run_quiet
 from .theme import C as COL
 from .theme import app_icon, dark_titlebar
 
@@ -27,15 +27,24 @@ SERVICE = "KeeneticDNS"
 
 
 def default_gateway() -> str:
+    """Шлюз по умолчанию — мгновенно, через iphlpapi.GetBestRoute (раньше PowerShell: окно висело секундами)."""
     if sys.platform == "win32":
         try:
-            out = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 "(Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Sort-Object RouteMetric | Select -First 1).NextHop"],
-                capture_output=True, text=True, timeout=5, creationflags=0x08000000)
-            ip = out.stdout.strip()
-            if ip and ip != "0.0.0.0":
-                return ip
+            import ctypes
+            import socket
+            from ctypes import wintypes
+
+            class MIB_IPFORWARDROW(ctypes.Structure):  # noqa: N801
+                _fields_ = [(n, wintypes.DWORD) for n in (
+                    "dest", "mask", "policy", "next_hop", "if_index", "type", "proto", "age",
+                    "next_hop_as", "metric1", "metric2", "metric3", "metric4", "metric5")]
+
+            row = MIB_IPFORWARDROW()
+            dst = int.from_bytes(socket.inet_aton("8.8.8.8"), "little")
+            if ctypes.windll.iphlpapi.GetBestRoute(wintypes.DWORD(dst), wintypes.DWORD(0), ctypes.byref(row)) == 0:
+                ip = socket.inet_ntoa(row.next_hop.to_bytes(4, "little"))
+                if ip != "0.0.0.0":
+                    return ip
         except Exception:  # noqa: BLE001
             pass
     return "192.168.1.1"
@@ -301,21 +310,39 @@ class LoginDialog(QDialog):
         h = self._form_host()
         if not h["host"]:
             return self._status("Укажите адрес роутера", COL["bad"])
-        self._status(f"Подключаюсь к {h['host']}…")
-        self.setEnabled(False)
-        self.repaint()
-        try:
-            c = RCIClient(h["host"], h["port"])
-            c.login(h["user"], self.pwd.text())
-            self.version = c.version()
-        except Exception as e:  # noqa: BLE001
-            self.setEnabled(True)
-            self._status(f"Не удалось подключиться: {e}", COL["bad"])
+        if getattr(self, "_connecting", False):
             return
-        self.setEnabled(True)
-        h["model"] = self.version.get("model") or self.version.get("description") or ""
-        if self._cur or self.name.text().strip():  # сохраняем известный/именованный роутер
-            self._cur = h
-            self._save(quiet=True)
-        self.client, self.host_info = c, h
-        self.accept()
+        self._connecting = True
+        self._status(f"Подключаюсь к {h['host']}…")
+        self._lock(True)
+        pwd = self.pwd.text()
+
+        def work():  # в фоне — окно не замирает, даже если роутер не отвечает
+            c = RCIClient(h["host"], h["port"], timeout=8)
+            c.login(h["user"], pwd)
+            return c, c.version()
+
+        def ok(res):
+            self._connecting = False
+            self._lock(False)
+            c, self.version = res
+            h["model"] = self.version.get("model") or self.version.get("description") or ""
+            if self._cur or self.name.text().strip():  # сохраняем известный/именованный роутер
+                self._cur = h
+                self._save(quiet=True)
+            self.client, self.host_info = c, h
+            self.accept()
+
+        def fail(msg):
+            self._connecting = False
+            self._lock(False)
+            self._status(f"Не удалось подключиться: {msg}", COL["bad"])
+
+        run_quiet(work, ok, fail)
+
+    def _lock(self, busy: bool):
+        """Пока идёт подключение — форма недоступна, но окно отвечает и его можно закрыть."""
+        for w in self.findChildren(QPushButton) + [self.name, self.host, self.port, self.user, self.pwd,
+                                                     self.list, self.search, self.keep]:
+            w.setEnabled(not busy)
+        self.setCursor(Qt.BusyCursor if busy else Qt.ArrowCursor)

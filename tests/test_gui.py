@@ -382,3 +382,28 @@ def test_disable_enable_list(app):
     _wait(app)
     assert fake.groups["youtube"].interface == "Wireguard0"
     assert "youtube" not in w.disabled.for_router("home1")
+
+
+def test_login_connect_in_background(app, monkeypatch):
+    import time
+    from keenetic_dns.ui import login as L
+
+    class SlowFail:
+        def __init__(self, *a, **k):
+            pass
+
+        def login(self, *a):
+            time.sleep(0.3)
+            raise RuntimeError("Роутер недоступен")
+
+    monkeypatch.setattr(L, "RCIClient", SlowFail)
+    d = L.LoginDialog()
+    d.show()
+    d._new()
+    assert d.host.text()  # шлюз подставлен сразу
+    t = time.time()
+    d._connect()
+    assert time.time() - t < 0.2  # окно не ждёт роутер
+    assert not d.pwd.isEnabled()
+    _wait(app)
+    assert "недоступен" in d.state.text() and d.pwd.isEnabled()
