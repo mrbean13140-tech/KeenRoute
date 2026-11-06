@@ -207,8 +207,8 @@ class PolicyPanel(QWidget):
         q = self.search.text().strip().lower()
         for r in range(self.table.rowCount()):
             d = self.devices.get(self.table.item(r, 0).data(Qt.UserRole))
-            hide = bool(d) and ((self.only_online.isChecked() and not d.online) or
-                                (q and q not in f"{d.title} {d.mac} {d.ip}".lower()))
+            hide = bool(d) and bool((self.only_online.isChecked() and not d.online) or
+                                    (q and q not in f"{d.title} {d.mac} {d.ip}".lower()))
             self.table.setRowHidden(r, hide)
 
     def _update(self, *_):
