@@ -407,3 +407,25 @@ def test_login_connect_in_background(app, monkeypatch):
     assert not d.pwd.isEnabled()
     _wait(app)
     assert "недоступен" in d.state.text() and d.pwd.isEnabled()
+
+
+def test_policies_tab(app):
+    from keenetic_dns.core import policy as P
+    from .test_policy import CFG as POL_CFG
+    fake = FakeRouter(CFG + POL_CFG, {**IFACES, "PPPoE0": {"id": "PPPoE0", "type": "PPPoE", "link": "up"}})
+    w = mw.MainWindow(fake, {"model": "KN-1010", "title": "4.2"}, {"name": "Дом"})
+    _wait(app)
+    pp = w.policy_panel
+    w.open_policies()
+    assert pp.table.rowCount() == 3 and pp.combo.count() == 2  # по умолчанию + Policy2
+    pp.new = P.Policy("Policy0", "Через VPN", ["Wireguard0", "PPPoE0"])  # как из «Создать политику…»
+    pp._fill_combo("Policy0")
+    pp.check_all(True)
+    assert len(pp.checked()) == 3
+    _shot(w, "policies.png")
+    pp.accept()
+    _wait(app)
+    assert w.last_apply["ok"], w.last_apply
+    assert {d.policy for d in fake.devices.values()} == {"Policy0"}
+    assert fake.policies["Policy0"].permits == ["Wireguard0", "PPPoE0"]
+    assert pp.combo.findData("Policy0") > 0  # после перечитывания — уже существующая политика

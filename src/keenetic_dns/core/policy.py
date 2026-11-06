@@ -127,3 +127,32 @@ def verify_assign(after: dict[str, Device], macs: list[str], policy: str | None)
     want = policy or ""
     return [f"{(after.get(m) or Device(m)).title}: политика не применилась" for m in macs
             if (after.get(m) or Device(m)).policy != want]
+
+
+def plan(policies: dict[str, Policy], devices: dict[str, Device], macs: list[str], policy: str | None,
+         new: Policy | None = None) -> tuple[list[str], list[str]]:
+    """Команды и сводка: (при необходимости) создать политику new и перевести на неё устройства macs."""
+    cmds, summary = [], []
+    if new and new.name not in policies:
+        cmds += create_cmds(new.name, new.description, new.permits)
+        summary.append(f"+ Создать политику «{new.title}» → выход: {', '.join(new.permits) or 'нет'}")
+    title = (new.title if new and new.name == policy else
+             policies[policy].title if policy in policies else policy) if policy else "по умолчанию"
+    devs = [devices.get(m) or Device(m) for m in macs]
+    acmds = assign_cmds(devs, policy)
+    cmds += acmds
+    for d in devs:
+        if (policy or "") != d.policy:
+            was = policies[d.policy].title if d.policy in policies else (d.policy or "по умолчанию")
+            summary.append(f"~ {d.title}: {was} → {title}")
+    return cmds, summary
+
+
+def read_devices(client, lines: list[str]) -> dict[str, Device]:
+    """Устройства: из конфига + кто сейчас в сети (show ip hotspot, если роутер отдаёт)."""
+    devs = parse_devices(lines)
+    try:
+        merge_online(devs, client.get("show/ip/hotspot"))
+    except Exception:  # noqa: BLE001 — старые прошивки/эмулятор
+        pass
+    return devs

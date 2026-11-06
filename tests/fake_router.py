@@ -14,12 +14,26 @@ class FakeRouter:
         self.ran = []
         from keenetic_dns.core.dns import parse_dns
         self.dns = parse_dns(cfg_lines)
+        from keenetic_dns.core.policy import parse_devices, parse_policies
+        self.policies = parse_policies(cfg_lines)
+        self.devices = parse_devices(cfg_lines)
 
     def interfaces(self):
         return self.ifaces
 
     def running_config(self):
         out = ["system name Test"]
+        out += [f'known host "{d.name}" {d.mac}' for d in self.devices.values() if d.name]
+        for p in self.policies.values():
+            out.append(f"ip policy {p.name}")
+            if p.description:
+                out.append(f'    description "{p.description}"')
+            out += [f"    permit global {i}" for i in p.permits]
+            out.append("!")
+        out.append("ip hotspot")
+        out += [f"    host {d.mac} permit" for d in self.devices.values()]
+        out += [f"    host {d.mac} policy {d.policy}" for d in self.devices.values() if d.policy]
+        out.append("!")
         for g in self.groups.values():
             out.append(f"object-group fqdn {g.name}")
             if g.description:
@@ -95,6 +109,23 @@ class FakeRouter:
                 self.dns = [x for x in self.dns if x != u]
             elif u not in self.dns:
                 self.dns.append(u)
+            return
+        from keenetic_dns.core.policy import Device, Policy
+        m = re.match(r"^ip policy (\S+)(?: (description|permit global) (.+))?$", c)
+        if m:
+            p = self.policies.setdefault(m.group(1), Policy(m.group(1)))
+            if m.group(2) == "description":
+                p.description = ndms_unquote(m.group(3))
+            elif m.group(2):
+                p.permits.append(m.group(3))
+            return
+        m = re.match(r"^(no )?ip hotspot host (\S+) policy ?(\S*)$", c)
+        if m:
+            neg, mac, pol = m.groups()
+            if not neg and pol not in self.policies:
+                from keenetic_dns.api.rci import RCIError
+                raise RCIError(f"{c}: unable to find policy")
+            self.devices.setdefault(mac, Device(mac)).policy = "" if neg else pol
             return
         if c == "system configuration save":
             return
