@@ -159,6 +159,9 @@ QSplitter::handle {{ background: {C['border']}; width: 1px; }}
 QStatusBar {{ background: {C['side']}; color: {C['muted']}; border-top: 1px solid {C['border']}; }}
 QToolTip {{ background: {C['card']}; color: {C['text']}; border: 1px solid {C['border']}; padding: 4px; }}
 QMessageBox, QInputDialog {{ background: {C['bg']}; }}
+QProgressBar {{ background: {C['card2']}; border: 1px solid {C['border']}; border-radius: 6px; height: 18px;
+    text-align: center; color: {C['text']}; font-weight: 600; }}
+QProgressBar::chunk {{ background: {C['accent']}; border-radius: 5px; }}
 """
 
 

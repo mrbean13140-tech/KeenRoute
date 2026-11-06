@@ -30,6 +30,9 @@ class UpdateDialog(QDialog):
         self.notes = QLabel("", objectName="muted", wordWrap=True)
         lay.addWidget(self.notes)
         self.bar = QProgressBar()
+        self.bar.setTextVisible(True)
+        self.bar.setFormat("%p%")
+        self.bar.setMinimumHeight(20)
         self.bar.setVisible(False)
         lay.addWidget(self.bar)
         self.auto = QCheckBox("Проверять обновления при запуске")
@@ -90,6 +93,10 @@ class UpdateDialog(QDialog):
         self.bar.setVisible(True)
         self.state.setText(f"Скачиваю {self.rel.version}…")
         self._done = [0]  # байт скачано — пишет фоновый поток, читает таймер
+        self._t0, self._speed = None, []
+        self.bar.setValue(0)
+        if not self.rel.size:
+            self.bar.setRange(0, 0)  # размер неизвестен — «бегущая» полоса
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(300)
@@ -97,11 +104,21 @@ class UpdateDialog(QDialog):
                   lambda n: self._done.__setitem__(0, n))
 
     def _tick(self):
+        import time
         n, total = self._done[0], self.rel.size or 0
+        now = time.monotonic()
+        self._speed = [x for x in self._speed if now - x[0] < 5] + [(now, n)]  # скорость за последние 5 с
+        (t1, n1), (t2, n2) = self._speed[0], self._speed[-1]
+        bps = (n2 - n1) / (t2 - t1) if t2 > t1 else 0
         if total:
             self.bar.setValue(int(n * 100 / total))
-        self.state.setText(f"Скачиваю {self.rel.version}… {n / 1048576:.1f}"
-                           + (f" из {total / 1048576:.1f} МБ" if total else " МБ"))
+        txt = f"Скачиваю {self.rel.version}… {n / 1048576:.1f}" + (f" из {total / 1048576:.1f} МБ" if total else " МБ")
+        if bps > 0:
+            txt += f" · {bps / 1024:.0f} КБ/с"
+            if total:
+                left = int((total - n) / bps)
+                txt += f" · осталось ~{left // 60}:{left % 60:02d}"
+        self.state.setText(txt)
 
     def _fail_dl(self, e):
         self._timer.stop()
