@@ -56,3 +56,16 @@ def test_all_providers_valid():
             for u in D.preset_upstreams(p, kind):
                 assert D.parse_dns(["dns-proxy", "    " + u.cmd().split(" ", 1)[1], "!"] if kind != "plain"
                                    else [u.cmd()]) == [u], (p["id"], kind)
+
+
+def test_domain_presets():
+    providers = D.load_providers("assets/dns.json")
+    presets = D.load_domain_presets("assets/dns.json")
+    assert presets, "нет готовых наборов доменов"
+    for pr in presets:
+        ups = D.domain_preset_upstreams(pr, providers)
+        assert len(ups) == len(pr["domains"])
+        assert D.count_kind(ups, pr["kind"]) <= D.MAX_ENCRYPTED
+    ru = next(x for x in presets if x["id"] == "ru-yandex")
+    cmds = [u.cmd() for u in D.domain_preset_upstreams(ru, providers)]
+    assert "dns-proxy tls upstream 77.88.8.8 853 sni common.dot.dns.yandex.net domain rt.ru" in cmds

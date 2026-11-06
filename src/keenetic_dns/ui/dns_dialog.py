@@ -103,6 +103,22 @@ class DnsPanel(QWidget):
         area.setWidget(inner)
         rl.addWidget(area, 1)
 
+        try:
+            presets = D.load_domain_presets()
+        except Exception:  # noqa: BLE001
+            presets = []
+        if presets:
+            prow = QHBoxLayout()
+            prow.addWidget(QLabel("Готовые наборы:", objectName="muted"))
+            for pr in presets:
+                b = QPushButton(pr["title"])
+                b.setToolTip(pr.get("note", "") + "\n" + ", ".join(pr.get("domains", [])))
+                b.setCursor(Qt.PointingHandCursor)
+                b.clicked.connect(lambda _=False, pr=pr: self.apply_preset(pr))
+                prow.addWidget(b)
+            prow.addStretch(1)
+            rl.addLayout(prow)
+
         row = QHBoxLayout()
         row.addWidget(QLabel("Только для доменов:", objectName="muted"))
         self.domains = QLineEdit(placeholderText="пусто — для всех запросов; или через запятую: ozon.ru, wb.ru")
@@ -205,6 +221,12 @@ class DnsPanel(QWidget):
         _, remove = self._planned()
         if remove:
             self.on_apply([], remove)
+
+    def apply_preset(self, pr: dict):
+        """Готовый набор: включить протокол у провайдера и подставить домены (применяет пользователь)."""
+        for p, kind, cb in self.boxes:
+            cb.setChecked(p["id"] == pr["provider"] and kind == pr.get("kind", "dot") and cb.isEnabled())
+        self.domains.setText(", ".join(pr.get("domains", [])))
 
     def _planned(self):
         doms = [d for d in (normalize_entry(x) for x in self.domains.text().split(",")) if d]

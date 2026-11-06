@@ -1,5 +1,5 @@
 {
- "version": 1,
+ "version": 2,
  "providers": [
   {
    "id": "cloudflare",
@@ -250,6 +250,25 @@
     "sni": "p0.freedns.controld.com"
    },
    "doh": "https://freedns.controld.com/p0"
+  }
+ ],
+ "domain_presets": [
+  {
+   "id": "ru-yandex",
+   "title": "Российские сайты → Яндекс",
+   "note": "Авито, Озон, Ростелеком, WB, Госуслуги резолвятся через Яндекс: правильные российские адреса CDN, без задержек зарубежных DNS. 8 доменов = лимит DoT.",
+   "provider": "yandex",
+   "kind": "dot",
+   "domains": [
+    "avito.ru",
+    "avito.st",
+    "ozon.ru",
+    "ozone.ru",
+    "rt.ru",
+    "rostelecom.ru",
+    "wildberries.ru",
+    "gosuslugi.ru"
+   ]
   }
  ]
 }

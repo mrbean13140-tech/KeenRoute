@@ -156,3 +156,19 @@ def provider_name(u: Upstream, providers: list[dict]) -> str:
         if u.kind == "plain" and u.addr in p.get("plain", []):
             return p["title"]
     return ""
+
+
+def load_domain_presets(path: str | Path | None = None) -> list[dict]:
+    """Готовые наборы «домены → DNS-провайдер» (секция domain_presets в dns.json)."""
+    if path is None:
+        from ..ui.theme import asset
+        path = asset("dns.json")
+    return json.loads(Path(path).read_text(encoding="utf-8")).get("domain_presets", [])
+
+
+def domain_preset_upstreams(preset: dict, providers: list[dict]) -> list[Upstream]:
+    """Набор → записи для роутера (по одной на домен)."""
+    p = next((x for x in providers if x["id"] == preset["provider"]), None)
+    if not p:
+        return []
+    return preset_upstreams(p, preset.get("kind", "dot"), preset.get("domains", []))
