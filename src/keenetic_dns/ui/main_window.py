@@ -18,6 +18,7 @@ from ..core import catalog as K
 from ..core import commands as C
 from ..core import dns as D
 from ..core import io
+from ..core import policy as P
 from ..core.model import (NAME_RE, Group, Iface, clean_list, normalize_entry, parse_interfaces,
                           parse_running_config)
 from .common import PreviewDialog, run_bg
@@ -104,11 +105,14 @@ class MainWindow(QMainWindow):
             log.exception("Шаблоны DNS не загрузились")
             providers = []
         self.dns_panel = DnsPanel(self, providers, self.apply_dns)
+        from .policy_panel import PolicyPanel
+        self.policy_panel = PolicyPanel(self, self.apply_policy)
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.setObjectName("pages")
         self.tabs.addTab(routing, icon("route"), "Маршрутизация DNS")
         self.tabs.addTab(self.dns_panel, icon("lock"), "DoT / DoH")
+        self.tabs.addTab(self.policy_panel, icon("monitor"), "Политики")
         self.tabs.currentChanged.connect(self._on_tab)
         split.addWidget(self.tabs)
         split.setStretchFactor(0, 0)
@@ -359,7 +363,7 @@ class MainWindow(QMainWindow):
     def refresh(self):
         def load():
             cfg = self.c.running_config()
-            return cfg, parse_running_config(cfg), parse_interfaces(self.c.interfaces())
+            return cfg, parse_running_config(cfg), parse_interfaces(self.c.interfaces()), P.read_devices(self.c, cfg)
         run_bg(self, load, self._loaded, busy="Читаю конфигурацию…")
 
     def _iface(self, name):
@@ -367,8 +371,13 @@ class MainWindow(QMainWindow):
 
     def _loaded(self, res):
         checked = {g.name for g in self.checked()}
-        self.config_lines, self.groups, self.ifaces = res
+        self.config_lines, self.groups, self.ifaces = res[:3]
+        if len(res) > 3:
+            self.devices = res[3]
         self.dns = D.parse_dns(self.config_lines)
+        self.policies = P.parse_policies(self.config_lines)
+        self.policy_panel.set_data(self.policies, getattr(self, "devices", None) or P.parse_devices(self.config_lines),
+                                   self.ifaces)
         for n in list(self.disabled.for_router(self._router_key())):
             g = self.groups.get(n)
             if not g or g.interface:
@@ -936,6 +945,50 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(f"✓ DNS применены и проверены · бэкап {r['backup'].name}", 8000)
             self.refresh()
         run_bg(self, work, done, busy="Применяю DNS…")
+
+    # ---------- политики ----------
+    def open_policies(self):
+        self.tabs.setCurrentWidget(self.policy_panel)
+
+    def apply_policy(self, macs: list[str], policy: str | None, new: P.Policy | None = None):
+        devices = getattr(self, "devices", None) or P.parse_devices(self.config_lines)
+        cmds, summary = P.plan(getattr(self, "policies", {}), devices, macs, policy, new)
+        if not cmds:
+            return QMessageBox.information(self, "Политики", "Все отмеченные устройства уже на этой политике.")
+        if PreviewDialog(C.with_save(cmds), self, summary).exec() != QDialog.Accepted:
+            return
+        label = self.host.get("name") or self.model
+        before = {m: (devices.get(m) or P.Device(m)).policy for m in macs}
+
+        def work():
+            backup = io.save_backup(self.c.running_config(), label)
+            error = None
+            try:
+                self.c.run(C.with_save(cmds))
+            except Exception as e:  # noqa: BLE001
+                error = str(e)
+            lines = self.c.running_config()
+            after = P.read_devices(self.c, lines)
+            return {"backup": backup, "error": error, "left": P.verify_assign(after, macs, policy)}
+
+        def done(r):
+            self.backup_path = r["backup"]
+            self.last_apply = {"ok": not (r["error"] or r["left"]), "error": r["error"], "left": r["left"]}
+            if r["error"] or r["left"]:
+                msg = "Политики применились не полностью.\n\n" + "\n".join(filter(None, [r["error"], *r["left"]]))
+                if QMessageBox.question(self, "Проверка не пройдена", msg + "\n\nВернуть устройства как было?") \
+                        == QMessageBox.Yes:
+                    back = []
+                    for m, pol in before.items():
+                        back += P.assign_cmds([P.Device(m, policy=policy or "")], pol or None)
+                    if back:
+                        run_bg(self, lambda: self.c.run(C.with_save(back)), lambda _: self.refresh(),
+                               busy="Возвращаю политики…")
+                        return
+            else:
+                self.statusBar().showMessage(f"✓ Политики применены и проверены · бэкап {r['backup'].name}", 8000)
+            self.refresh()
+        run_bg(self, work, done, busy="Применяю политики…")
 
     def _rollback(self, before: dict[str, Group]):
         def work():

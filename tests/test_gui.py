@@ -16,6 +16,7 @@ from keenetic_dns.ui import theme  # noqa: E402
 from .fake_router import FakeRouter  # noqa: E402
 from .test_core import CFG  # noqa: E402
 
+ERRORS = []  # окна «Ошибка» (в тестах не модальные — иначе прогон висит)
 SHOTS = Path(__file__).resolve().parent.parent / "screenshots"
 
 
@@ -39,6 +40,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
     monkeypatch.setattr(QMessageBox, "information", staticmethod(lambda *a, **k: None))
     monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+    monkeypatch.setattr(QMessageBox, "critical", staticmethod(lambda *a, **k: ERRORS.append(a[2] if len(a) > 2 else a)))
     return a
 
 
@@ -407,3 +409,28 @@ def test_login_connect_in_background(app, monkeypatch):
     assert not d.pwd.isEnabled()
     _wait(app)
     assert "недоступен" in d.state.text() and d.pwd.isEnabled()
+
+
+def test_policies_tab(app):
+    from keenetic_dns.core import policy as P
+    from .test_policy import CFG as POL_CFG
+    fake = FakeRouter(CFG + POL_CFG, {**IFACES, "PPPoE0": {"id": "PPPoE0", "type": "PPPoE", "link": "up"}})
+    ERRORS.clear()
+    w = mw.MainWindow(fake, {"model": "KN-1010", "title": "4.2"}, {"name": "Дом"})
+    _wait(app)
+    assert not ERRORS, ERRORS
+    pp = w.policy_panel
+    w.open_policies()
+    assert pp.table.rowCount() == 3 and pp.combo.count() == 2  # по умолчанию + Policy2
+    pp.new = P.Policy("Policy0", "Через VPN", ["Wireguard0", "PPPoE0"])  # как из «Создать политику…»
+    pp._fill_combo("Policy0")
+    pp.check_all(True)
+    assert len(pp.checked()) == 3
+    _shot(w, "policies.png")
+    pp.accept()
+    _wait(app)
+    assert not ERRORS, ERRORS
+    assert w.last_apply["ok"], w.last_apply
+    assert {d.policy for d in fake.devices.values()} == {"Policy0"}
+    assert fake.policies["Policy0"].permits == ["Wireguard0", "PPPoE0"]
+    assert pp.combo.findData("Policy0") > 0  # после перечитывания — уже существующая политика
