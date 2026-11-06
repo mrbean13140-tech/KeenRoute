@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
                                QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
                                QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
@@ -29,7 +29,7 @@ class NewPolicyDialog(QDialog):
         lay.addWidget(QLabel("Через какие подключения выходить в интернет (сверху — основное):", objectName="muted",
                              wordWrap=True))
         self.lst = QListWidget()
-        self.lst.setDragDropMode(QListWidget.InternalMove)
+        self.lst.setDragDropMode(QAbstractItemView.InternalMove)
         for i in ifaces:
             it = QListWidgetItem(f"{i.short}  ({i.name})" if i.description else i.name)
             it.setData(Qt.UserRole, i.name)
@@ -113,8 +113,8 @@ class PolicyPanel(QWidget):
         self.table = QTableWidget(0, len(self.COLS))
         self.table.setHorizontalHeaderLabels(self.COLS)
         self.table.verticalHeader().setVisible(False)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         h = self.table.horizontalHeader()
         h.setSectionResizeMode(QHeaderView.ResizeToContents)
         h.setSectionResizeMode(1, QHeaderView.Stretch)
