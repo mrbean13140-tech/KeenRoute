@@ -1,6 +1,7 @@
 """Окно «Обновления программы»."""
 from __future__ import annotations
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QHBoxLayout, QLabel, QMessageBox,
                                QProgressBar, QPushButton, QVBoxLayout)
 
@@ -88,9 +89,27 @@ class UpdateDialog(QDialog):
         self.b_install.setEnabled(False)
         self.bar.setVisible(True)
         self.state.setText(f"Скачиваю {self.rel.version}…")
-        run_quiet(U.download, self._downloaded, self._fail, self.rel, None)
+        self._done = [0]  # байт скачано — пишет фоновый поток, читает таймер
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(300)
+        run_quiet(U.download, self._downloaded, self._fail_dl, self.rel, None,
+                  lambda n: self._done.__setitem__(0, n))
+
+    def _tick(self):
+        n, total = self._done[0], self.rel.size or 0
+        if total:
+            self.bar.setValue(int(n * 100 / total))
+        self.state.setText(f"Скачиваю {self.rel.version}… {n / 1048576:.1f}"
+                           + (f" из {total / 1048576:.1f} МБ" if total else " МБ"))
+
+    def _fail_dl(self, e):
+        self._timer.stop()
+        self.b_install.setEnabled(True)
+        self._fail(e)
 
     def _downloaded(self, path):
+        self._timer.stop()
         self.bar.setValue(100)
         self.state.setText("Устанавливаю и перезапускаю…")
         try:

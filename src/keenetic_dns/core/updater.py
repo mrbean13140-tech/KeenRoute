@@ -77,15 +77,15 @@ def _download_dir() -> Path:
 def download(rel: Release, token: str | None = None, progress=None) -> Path:
     url = rel.asset_url if token else rel.download_url
     dst = _download_dir() / "KeenRoute.new.exe"
-    with requests.get(url, headers=_headers(token, binary=True), stream=True, timeout=60) as r:
+    with requests.get(url, headers=_headers(token, binary=True), stream=True, timeout=(15, 30)) as r:
         r.raise_for_status()
         done = 0
         with open(dst, "wb") as f:
-            for chunk in r.iter_content(256 * 1024):
+            for chunk in r.iter_content(64 * 1024):
                 f.write(chunk)
                 done += len(chunk)
-                if progress and rel.size:
-                    progress(int(done * 100 / rel.size))
+                if progress:
+                    progress(done)  # скачано байт; при обрыве >30 с — ошибка таймаута
     if rel.size and dst.stat().st_size != rel.size:
         raise RuntimeError("Файл обновления скачался не полностью")
     return dst
