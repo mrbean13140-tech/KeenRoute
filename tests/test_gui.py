@@ -465,3 +465,18 @@ def test_policy_edit_delete(app, monkeypatch):
     assert not ERRORS, ERRORS
     assert w.last_apply["ok"], w.last_apply
     assert "Policy2" not in fake.policies and pp.combo.findData("Policy2") < 0
+
+
+def test_policy_dialog_priority(app):
+    from keenetic_dns.core import policy as P
+    from keenetic_dns.core.model import Iface
+    from keenetic_dns.ui.policy_panel import NewPolicyDialog
+    ifs = [Iface("Wireguard3", "Wireguard", "AWG-AMS", True), Iface("PPPoE0", "PPPoE", "", True)]
+    d = NewPolicyDialog(None, "Policy2", ifs, edit=P.Policy("Policy2", "ТВ", ["PPPoE0", "Wireguard3"]))
+    assert d.permits() == ["PPPoE0", "Wireguard3"]
+    assert d.lst.item(0).text().startswith("1.")
+    d.lst.setCurrentRow(1)
+    d.move(-1)  # ▲ — Wireguard3 становится основным
+    assert d.permits() == ["Wireguard3", "PPPoE0"] and "основное" in d.lst.item(0).text()
+    d.show()
+    _shot(d, "policy_priority.png")

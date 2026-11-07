@@ -26,8 +26,8 @@ class NewPolicyDialog(QDialog):
         form.addRow("Имя на роутере:", self.name)
         form.addRow("Название:", self.desc)
         lay.addLayout(form)
-        lay.addWidget(QLabel("Через какие подключения выходить в интернет (сверху — основное):", objectName="muted",
-                             wordWrap=True))
+        lay.addWidget(QLabel("Через какие подключения выходить в интернет. Приоритет — сверху вниз: №1 основное, "
+                             "остальные — резерв, если основное упало.", objectName="muted", wordWrap=True))
         self.lst = QListWidget()
         self.lst.setDragDropMode(QAbstractItemView.InternalMove)
         if edit:
@@ -41,15 +41,54 @@ class NewPolicyDialog(QDialog):
         for i in ifaces:
             it = QListWidgetItem(f"{i.short}  ({i.name})" if i.description else i.name)
             it.setData(Qt.UserRole, i.name)
+            it.setData(Qt.UserRole + 1, it.text())
             it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
             it.setCheckState(Qt.Checked if edit and i.name in edit.permits else Qt.Unchecked)
             self.lst.addItem(it)
-        lay.addWidget(self.lst, 1)
-        lay.addWidget(QLabel("Порядок меняется перетаскиванием.", objectName="muted"))
+        self.lst.itemChanged.connect(self._renumber)
+        self.lst.model().rowsMoved.connect(self._renumber)
+        row = QHBoxLayout()
+        row.addWidget(self.lst, 1)
+        col = QVBoxLayout()
+        up, down = QPushButton("▲"), QPushButton("▼")
+        up.setToolTip("Поднять приоритет")
+        down.setToolTip("Понизить приоритет")
+        for b, d in ((up, -1), (down, 1)):
+            b.setFixedWidth(40)
+            b.clicked.connect(lambda _=False, d=d: self.move(d))
+            col.addWidget(b)
+        col.addStretch(1)
+        row.addLayout(col)
+        lay.addLayout(row, 1)
+        lay.addWidget(QLabel("Порядок — кнопками ▲▼ или перетаскиванием.", objectName="muted"))
+        self._renumber()
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(self._ok)
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
+
+    def move(self, d: int):
+        r = self.lst.currentRow()
+        if r < 0 or not 0 <= r + d < self.lst.count():
+            return
+        it = self.lst.takeItem(r)
+        self.lst.insertItem(r + d, it)
+        self.lst.setCurrentRow(r + d)
+        self._renumber()
+
+    def _renumber(self, *_):
+        """Номер приоритета у отмеченных подключений."""
+        self.lst.blockSignals(True)
+        n = 0
+        for i in range(self.lst.count()):
+            it = self.lst.item(i)
+            base = it.data(Qt.UserRole + 1)
+            if it.checkState() == Qt.Checked:
+                n += 1
+                it.setText(f"{n}.  {base}" + ("   — основное" if n == 1 else ""))
+            else:
+                it.setText(f"     {base}")
+        self.lst.blockSignals(False)
 
     def permits(self) -> list[str]:
         return [self.lst.item(i).data(Qt.UserRole) for i in range(self.lst.count())
@@ -269,7 +308,8 @@ class PolicyPanel(QWidget):
     def _update(self, *_):
         name = self.current_policy()
         p = self.new if self.new and self.new.name == name else self.policies.get(name or "")
-        self.permits.setText(f"выход: {' → '.join(p.permits)}" if p and p.permits else
+        self.permits.setText("приоритет: " + "  ›  ".join(f"{k}. {i}" for k, i in enumerate(p.permits, 1))
+                             if p and p.permits else
                              "" if p else "основное подключение роутера")
         n = len(self.checked())
         self.info.setText(f"Отмечено устройств: {n}")

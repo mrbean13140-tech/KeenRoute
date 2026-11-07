@@ -129,8 +129,10 @@ class FakeRouter:
             p = self.policies.setdefault(m.group(1), Policy(m.group(1)))
             if m.group(2) == "description":
                 p.description = ndms_unquote(m.group(3))
-            elif m.group(2):
-                p.permits.append(m.group(3))
+            elif m.group(2):  # как NDMS: «order N» ставит интерфейс на позицию N (с нуля)
+                iface, _, order = m.group(3).partition(" order ")
+                p.permits = [i for i in p.permits if i != iface]
+                p.permits.insert(int(order) if order else len(p.permits), iface)
             return
         m = re.match(r"^(no )?ip hotspot host (\S+) policy ?(\S*)$", c)
         if m:

@@ -32,7 +32,8 @@ def test_plan_create_and_assign_all():
     new = P.Policy("Policy0", "Через VPN", ["Wireguard3", "PPPoE0"])
     cmds, summary = P.plan(pols, devs, list(devs), "Policy0", new)
     assert cmds[:4] == ["ip policy Policy0", 'ip policy Policy0 description "Через VPN"',
-                        "ip policy Policy0 permit global Wireguard3", "ip policy Policy0 permit global PPPoE0"]
+                        "ip policy Policy0 permit global Wireguard3 order 0",
+                        "ip policy Policy0 permit global PPPoE0 order 1"]
     assert sum(c.startswith("ip hotspot host") for c in cmds) == 3 and len(summary) == 4
     cmds, _ = P.plan(pols, devs, ["60:ab:14:95:96:78", "28:02:2e:60:a2:ff"], None)
     assert cmds == ["no ip hotspot host 60:ab:14:95:96:78 policy"]  # второй уже по умолчанию
@@ -64,3 +65,14 @@ def test_edit_and_delete_on_fake_router():
     after = r.running_config()
     assert not P.verify_policy(P.parse_policies(after), "Policy2", None)
     assert P.parse_devices(after)["60:ab:14:95:96:78"].policy == ""
+
+
+def test_reorder_priority():
+    r = FakeRouter(CFG)
+    r.run(P.create_cmds("Policy0", "", ["PPPoE0", "Wireguard3", "Wireguard1"]))
+    old = P.parse_policies(r.running_config())["Policy0"]
+    want = P.Policy("Policy0", "", ["Wireguard1", "PPPoE0"])  # Wireguard1 — основной, Wireguard3 убран
+    cmds, _ = P.edit_cmds(old, want)
+    assert cmds[0] == "no ip policy Policy0 permit global Wireguard3"
+    r.run(cmds)
+    assert P.parse_policies(r.running_config())["Policy0"].permits == ["Wireguard1", "PPPoE0"]

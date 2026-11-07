@@ -106,8 +106,13 @@ def create_cmds(name: str, description: str, permits: list[str]) -> list[str]:
     cmds = [f"ip policy {name}"]
     if description:
         cmds.append(f"ip policy {name} description {ndms_quote(description)}")
-    cmds += [f"ip policy {name} permit global {i}" for i in permits]
+    cmds += permit_cmds(name, permits)
     return cmds
+
+
+def permit_cmds(name: str, permits: list[str]) -> list[str]:
+    """Выходы по приоритету: order N — позиция в списке (0 — основное подключение; проверено на NDMS 5)."""
+    return [f"ip policy {name} permit global {i} order {k}" for k, i in enumerate(permits)]
 
 
 def assign_cmds(devices: list[Device], policy: str | None) -> list[str]:
@@ -159,16 +164,15 @@ def read_devices(client, lines: list[str]) -> dict[str, Device]:
 
 
 def edit_cmds(old: Policy, new: Policy) -> tuple[list[str], list[str]]:
-    """Изменить название и выходы политики (имя на роутере не меняется). Порядок выходов —
-    пересоздаём список permit целиком, если он изменился."""
+    """Изменить название и выходы политики (имя на роутере не меняется); порядок — через order."""
     cmds, summary = [], []
     if new.description != old.description:
         cmds.append(f"ip policy {old.name} description {ndms_quote(new.description)}" if new.description
                     else f"no ip policy {old.name} description")
         summary.append(f"~ Название: «{old.title}» → «{new.description or old.name}»")
     if new.permits != old.permits:
-        cmds += [f"no ip policy {old.name} permit global {i}" for i in old.permits]
-        cmds += [f"ip policy {old.name} permit global {i}" for i in new.permits]
+        cmds += [f"no ip policy {old.name} permit global {i}" for i in old.permits if i not in new.permits]
+        cmds += permit_cmds(old.name, new.permits)
         summary.append(f"~ Выход: {' → '.join(old.permits) or 'нет'}  ⇒  {' → '.join(new.permits)}")
     return cmds, summary
 
