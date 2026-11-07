@@ -480,3 +480,6 @@ def test_policy_dialog_priority(app):
     assert d.permits() == ["Wireguard3", "PPPoE0"] and "основное" in d.lst.item(0).text()
     d.show()
     _shot(d, "policy_priority.png")
+    import shiboken6
+    d.close()
+    shiboken6.delete(d)  # окно без родителя: удалить до выхода, иначе Qt падает при завершении (код 1)
