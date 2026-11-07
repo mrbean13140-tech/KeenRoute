@@ -422,6 +422,13 @@ def test_policies_tab(app):
     pp = w.policy_panel
     w.open_policies()
     assert pp.table.rowCount() == 3 and pp.combo.count() == 2  # по умолчанию + Policy2
+    assert pp.groups.count() == 3  # все / по умолчанию / Policy2
+    pp.show_group("Policy2")
+    visible = [pp.table.item(r, 2).text() for r in range(pp.table.rowCount()) if not pp.table.isRowHidden(r)]
+    assert visible == ["60:ab:14:95:96:78"]
+    pp.show_group("")
+    assert sum(not pp.table.isRowHidden(r) for r in range(3)) == 2
+    pp.show_group(pp.ALL)
     pp.new = P.Policy("Policy0", "Через VPN", ["Wireguard0", "PPPoE0"])  # как из «Создать политику…»
     pp._fill_combo("Policy0")
     pp.check_all(True)

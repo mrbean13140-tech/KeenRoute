@@ -126,7 +126,8 @@ class PolicyPanel(QWidget):
         root.setSpacing(10)
         root.addWidget(QLabel("Политики доступа", objectName="h2"))
         root.addWidget(QLabel("Политика задаёт, через какое подключение устройство выходит в интернет. "
-                              "Выберите или создайте политику, отметьте устройства и нажмите «Применить».",
+                              "Слева — кто в какой политике. Чтобы перевести: отметьте устройства, выберите "
+                              "политику вверху и нажмите «Применить».",
                               objectName="muted", wordWrap=True))
         top = QHBoxLayout()
         top.addWidget(QLabel("Политика:"))
@@ -176,7 +177,18 @@ class PolicyPanel(QWidget):
         h.setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.itemChanged.connect(self._update)
         self.table.cellDoubleClicked.connect(self._toggle_row)
-        root.addWidget(self.table, 1)
+        body = QHBoxLayout()
+        side = QVBoxLayout()
+        side.setSpacing(4)
+        side.addWidget(QLabel("Устройства по политикам", objectName="muted"))
+        self.groups = QListWidget()
+        self.groups.setFixedWidth(240)
+        self.groups.setToolTip("Клик — показать в таблице только устройства этой политики")
+        self.groups.currentItemChanged.connect(self._filter)
+        side.addWidget(self.groups, 1)
+        body.addLayout(side)
+        body.addWidget(self.table, 1)
+        root.addLayout(body, 1)
 
         bot = QHBoxLayout()
         self.info = QLabel("", objectName="muted")
@@ -208,6 +220,7 @@ class PolicyPanel(QWidget):
             for c, it in enumerate(cells):
                 self.table.setItem(r, c, it)
         self.table.blockSignals(False)
+        self._fill_groups()
         self._filter()
 
     def _fill_combo(self, keep=None):
@@ -297,11 +310,48 @@ class PolicyPanel(QWidget):
         it = self.table.item(r, 0)
         it.setCheckState(Qt.Unchecked if it.checkState() == Qt.Checked else Qt.Checked)
 
+    ALL = "\x00all"  # «Все устройства» в списке групп
+
+    def _fill_groups(self):
+        """Слева: Все устройства / По умолчанию / каждая политика — с числом устройств (в сети/всего)."""
+        cur = self.group()
+        self.groups.blockSignals(True)
+        self.groups.clear()
+        devs = list(self.devices.values())
+
+        def add(key, title):
+            members = devs if key == self.ALL else [d for d in devs if (d.policy or DEFAULT) == key]
+            on = sum(d.online for d in members)
+            it = QListWidgetItem(f"{title}   ·  {len(members)}" + (f"  ({on} в сети)" if on else ""))
+            it.setData(Qt.UserRole, key)
+            it.setToolTip("\n".join(d.title for d in sorted(members, key=lambda x: x.title.lower())[:40]) or "нет устройств")
+            self.groups.addItem(it)
+        add(self.ALL, "Все устройства")
+        add(DEFAULT, "По умолчанию")
+        for p in sorted(self.policies.values(), key=lambda x: x.title.lower()):
+            add(p.name, p.title)
+        for name in sorted({d.policy for d in devs if d.policy and d.policy not in self.policies}):
+            add(name, f"{name} (нет на роутере)")
+        keys = [self.groups.item(i).data(Qt.UserRole) for i in range(self.groups.count())]
+        self.groups.setCurrentRow(keys.index(cur) if cur in keys else 0)
+        self.groups.blockSignals(False)
+
+    def group(self) -> str:
+        it = self.groups.currentItem() if self.groups.count() else None
+        return it.data(Qt.UserRole) if it else self.ALL
+
+    def show_group(self, key: str):
+        for i in range(self.groups.count()):
+            if self.groups.item(i).data(Qt.UserRole) == key:
+                self.groups.setCurrentRow(i)
+
     def _filter(self, *_):
         q = self.search.text().strip().lower()
+        g = self.group()
         for r in range(self.table.rowCount()):
             d = self.devices.get(self.table.item(r, 0).data(Qt.UserRole))
             hide = bool(d) and bool((self.only_online.isChecked() and not d.online) or
+                                    (g != self.ALL and (d.policy or DEFAULT) != g) or
                                     (q and q not in f"{d.title} {d.mac} {d.ip}".lower()))
             self.table.setRowHidden(r, hide)
 
