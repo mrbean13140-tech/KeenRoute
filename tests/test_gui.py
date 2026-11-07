@@ -434,3 +434,34 @@ def test_policies_tab(app):
     assert {d.policy for d in fake.devices.values()} == {"Policy0"}
     assert fake.policies["Policy0"].permits == ["Wireguard0", "PPPoE0"]
     assert pp.combo.findData("Policy0") > 0  # после перечитывания — уже существующая политика
+
+
+def test_policy_edit_delete(app, monkeypatch):
+    from keenetic_dns.ui import policy_panel as PP
+    from .test_policy import CFG as POL_CFG
+    fake = FakeRouter(CFG + POL_CFG, {**IFACES, "PPPoE0": {"id": "PPPoE0", "type": "PPPoE", "link": "up"}})
+    ERRORS.clear()
+    w = mw.MainWindow(fake, {"model": "KN-1010", "title": "4.2"}, {"name": "Дом"})
+    _wait(app)
+    pp = w.policy_panel
+    pp.combo.setCurrentIndex(pp.combo.findData("Policy2"))
+    assert pp.b_edit.isEnabled() and pp.b_del.isEnabled()
+
+    def fake_exec(dlg):  # «пользователь» поменял название и выход
+        dlg.desc.setText("ТВ")
+        for i in range(dlg.lst.count()):
+            it = dlg.lst.item(i)
+            it.setCheckState(Qt.Checked if it.data(Qt.UserRole) == "Wireguard0" else Qt.Unchecked)
+        return 1
+    monkeypatch.setattr(PP.NewPolicyDialog, "exec", fake_exec)
+    pp.edit_policy()
+    _wait(app)
+    assert not ERRORS, ERRORS
+    assert w.last_apply["ok"], w.last_apply
+    assert fake.policies["Policy2"].description == "ТВ" and fake.policies["Policy2"].permits == ["Wireguard0"]
+    pp.combo.setCurrentIndex(pp.combo.findData("Policy2"))
+    pp.delete_policy()
+    _wait(app)
+    assert not ERRORS, ERRORS
+    assert w.last_apply["ok"], w.last_apply
+    assert "Policy2" not in fake.policies and pp.combo.findData("Policy2") < 0

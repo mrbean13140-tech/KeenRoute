@@ -111,6 +111,19 @@ class FakeRouter:
                 self.dns.append(u)
             return
         from keenetic_dns.core.policy import Device, Policy
+        m = re.match(r"^no ip policy (\S+)(?: (description|permit global) ?(.*))?$", c)
+        if m:
+            name, sub, arg = m.groups()
+            if not sub:
+                if any(d.policy == name for d in self.devices.values()):
+                    from keenetic_dns.api.rci import RCIError
+                    raise RCIError(f"{c}: policy is in use")
+                self.policies.pop(name, None)
+            elif sub == "description":
+                self.policies[name].description = ""
+            else:
+                self.policies[name].permits = [i for i in self.policies[name].permits if i != arg]
+            return
         m = re.match(r"^ip policy (\S+)(?: (description|permit global) (.+))?$", c)
         if m:
             p = self.policies.setdefault(m.group(1), Policy(m.group(1)))

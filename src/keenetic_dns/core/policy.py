@@ -156,3 +156,42 @@ def read_devices(client, lines: list[str]) -> dict[str, Device]:
     except Exception:  # noqa: BLE001 — старые прошивки/эмулятор
         pass
     return devs
+
+
+def edit_cmds(old: Policy, new: Policy) -> tuple[list[str], list[str]]:
+    """Изменить название и выходы политики (имя на роутере не меняется). Порядок выходов —
+    пересоздаём список permit целиком, если он изменился."""
+    cmds, summary = [], []
+    if new.description != old.description:
+        cmds.append(f"ip policy {old.name} description {ndms_quote(new.description)}" if new.description
+                    else f"no ip policy {old.name} description")
+        summary.append(f"~ Название: «{old.title}» → «{new.description or old.name}»")
+    if new.permits != old.permits:
+        cmds += [f"no ip policy {old.name} permit global {i}" for i in old.permits]
+        cmds += [f"ip policy {old.name} permit global {i}" for i in new.permits]
+        summary.append(f"~ Выход: {' → '.join(old.permits) or 'нет'}  ⇒  {' → '.join(new.permits)}")
+    return cmds, summary
+
+
+def delete_cmds(policy: Policy, devices: dict[str, Device]) -> tuple[list[str], list[str]]:
+    """Удалить политику: сначала вернуть её устройства на политику по умолчанию."""
+    bound = [d for d in devices.values() if d.policy == policy.name]
+    cmds = assign_cmds(bound, None) + [f"no ip policy {policy.name}"]
+    summary = [f"~ {d.title}: {policy.title} → по умолчанию" for d in bound]
+    summary.append(f"− Удалить политику «{policy.title}»")
+    return cmds, summary
+
+
+def verify_policy(after: dict[str, Policy], name: str, want: Policy | None) -> list[str]:
+    """want=None — политики быть не должно."""
+    p = after.get(name)
+    if want is None:
+        return [f"политика {name} не удалилась"] if p else []
+    if not p:
+        return [f"политика {name} не найдена"]
+    out = []
+    if p.description != want.description:
+        out.append(f"{name}: название не применилось")
+    if p.permits != want.permits:
+        out.append(f"{name}: выходы {p.permits} вместо {want.permits}")
+    return out

@@ -106,7 +106,7 @@ class MainWindow(QMainWindow):
             providers = []
         self.dns_panel = DnsPanel(self, providers, self.apply_dns)
         from .policy_panel import PolicyPanel
-        self.policy_panel = PolicyPanel(self, self.apply_policy)
+        self.policy_panel = PolicyPanel(self, self.apply_policy, self.change_policy)
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
         self.tabs.setObjectName("pages")
@@ -989,6 +989,35 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(f"✓ Политики применены и проверены · бэкап {r['backup'].name}", 8000)
             self.refresh()
         run_bg(self, work, done, busy="Применяю политики…")
+
+    def change_policy(self, cmds: list[str], summary: list[str], name: str, want: P.Policy | None):
+        """Изменить (want) или удалить (want=None) политику: предпросмотр, бэкап, применение, проверка."""
+        if PreviewDialog(C.with_save(cmds), self, summary).exec() != QDialog.Accepted:
+            return
+        label = self.host.get("name") or self.model
+
+        def work():
+            backup = io.save_backup(self.c.running_config(), label)
+            error = None
+            try:
+                self.c.run(C.with_save(cmds))
+            except Exception as e:  # noqa: BLE001
+                error = str(e)
+            left = P.verify_policy(P.parse_policies(self.c.running_config()), name, want)
+            return {"backup": backup, "error": error, "left": left}
+
+        def done(r):
+            self.backup_path = r["backup"]
+            self.last_apply = {"ok": not (r["error"] or r["left"]), "error": r["error"], "left": r["left"]}
+            if r["error"] or r["left"]:
+                QMessageBox.warning(self, "Проверка не пройдена",
+                                    "Изменения применились не полностью.\n\n"
+                                    + "\n".join(filter(None, [r["error"], *r["left"]]))
+                                    + f"\n\nБэкап до изменений: {r['backup'].name} (кнопка «Восстановить из бэкапа»).")
+            else:
+                self.statusBar().showMessage(f"✓ Готово и проверено · бэкап {r['backup'].name}", 8000)
+            self.refresh()
+        run_bg(self, work, done, busy="Применяю…")
 
     def _rollback(self, before: dict[str, Group]):
         def work():

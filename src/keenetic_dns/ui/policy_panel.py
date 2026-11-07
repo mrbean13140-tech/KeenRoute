@@ -15,9 +15,9 @@ DEFAULT = ""  # политика по умолчанию (без привязк�
 class NewPolicyDialog(QDialog):
     """Новая политика: название и выходы (интерфейсы) в порядке приоритета."""
 
-    def __init__(self, parent, name: str, ifaces):
+    def __init__(self, parent, name: str, ifaces, edit: P.Policy | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Новая политика")
+        self.setWindowTitle("Изменить политику" if edit else "Новая политика")
         self.resize(420, 380)
         lay = QVBoxLayout(self)
         form = QFormLayout()
@@ -30,11 +30,19 @@ class NewPolicyDialog(QDialog):
                              wordWrap=True))
         self.lst = QListWidget()
         self.lst.setDragDropMode(QAbstractItemView.InternalMove)
+        if edit:
+            self.name.setReadOnly(True)
+            self.name.setToolTip("Имя на роутере не меняется")
+            self.desc.setText(edit.description)
+            order = {n: k for k, n in enumerate(edit.permits)}
+            known = {i.name for i in ifaces}
+            ifaces = sorted(ifaces, key=lambda i: order.get(i.name, 999)) + \
+                [type("X", (), {"name": n, "description": "", "short": n})() for n in edit.permits if n not in known]
         for i in ifaces:
             it = QListWidgetItem(f"{i.short}  ({i.name})" if i.description else i.name)
             it.setData(Qt.UserRole, i.name)
             it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
-            it.setCheckState(Qt.Unchecked)
+            it.setCheckState(Qt.Checked if edit and i.name in edit.permits else Qt.Unchecked)
             self.lst.addItem(it)
         lay.addWidget(self.lst, 1)
         lay.addWidget(QLabel("Порядок меняется перетаскиванием.", objectName="muted"))
@@ -64,9 +72,9 @@ class PolicyPanel(QWidget):
 
     COLS = ["", "Устройство", "MAC", "IP", "Сейчас"]
 
-    def __init__(self, parent, on_apply):
+    def __init__(self, parent, on_apply, on_change=None):
         super().__init__(parent)
-        self.on_apply = on_apply
+        self.on_apply, self.on_change = on_apply, on_change
         self.policies: dict[str, P.Policy] = {}
         self.devices: dict[str, P.Device] = {}
         self.ifaces = []
@@ -91,6 +99,15 @@ class PolicyPanel(QWidget):
         set_icon(add, "plus")
         add.clicked.connect(self.create_policy)
         top.addWidget(add)
+        self.b_edit = QPushButton("Изменить…")
+        self.b_edit.setToolTip("Название и подключения выбранной политики")
+        self.b_edit.clicked.connect(self.edit_policy)
+        top.addWidget(self.b_edit)
+        self.b_del = QPushButton("Удалить", objectName="danger")
+        set_icon(self.b_del, "trash", "danger")
+        self.b_del.setToolTip("Удалить выбранную политику; её устройства перейдут на политику по умолчанию")
+        self.b_del.clicked.connect(self.delete_policy)
+        top.addWidget(self.b_del)
         self.permits = QLabel("", objectName="muted")
         top.addWidget(self.permits, 1)
         root.addLayout(top)
@@ -191,6 +208,44 @@ class PolicyPanel(QWidget):
         self.new = p
         self._fill_combo(p.name)
 
+    def _selected(self) -> P.Policy | None:
+        name = self.current_policy()
+        if self.new and self.new.name == name:
+            return self.new
+        return self.policies.get(name or "")
+
+    def edit_policy(self):
+        p = self._selected()
+        if not p:
+            return
+        dlg = NewPolicyDialog(self, p.name, self.ifaces, edit=p)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        new = dlg.policy()
+        if p is self.new:  # ещё не на роутере — просто поправить черновик
+            self.new = new
+            return self._fill_combo(new.name)
+        cmds, summary = P.edit_cmds(p, new)
+        if not cmds:
+            return QMessageBox.information(self, "Политики", "Ничего не изменилось.")
+        self.on_change(cmds, summary, p.name, new)
+
+    def delete_policy(self):
+        p = self._selected()
+        if not p:
+            return
+        if p is self.new:
+            self.new = None
+            return self._fill_combo(DEFAULT)
+        bound = [d for d in self.devices.values() if d.policy == p.name]
+        msg = f"Удалить политику «{p.title}»?"
+        if bound:
+            msg += f"\n\nУстройств на ней: {len(bound)} — они перейдут на политику по умолчанию."
+        if QMessageBox.question(self, "Удаление политики", msg) != QMessageBox.Yes:
+            return
+        cmds, summary = P.delete_cmds(p, self.devices)
+        self.on_change(cmds, summary, p.name, None)
+
     def check_all(self, on: bool):
         self.table.blockSignals(True)
         for r in range(self.table.rowCount()):
@@ -219,6 +274,9 @@ class PolicyPanel(QWidget):
         n = len(self.checked())
         self.info.setText(f"Отмечено устройств: {n}")
         self.ok.setEnabled(bool(n) or bool(self.new))
+        existing = (name or "") in self.policies
+        self.b_edit.setEnabled(existing or bool(self.new and self.new.name == name))
+        self.b_del.setEnabled(existing or bool(self.new and self.new.name == name))
 
     def accept(self):
         macs = self.checked()

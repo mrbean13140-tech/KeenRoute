@@ -47,3 +47,20 @@ def test_apply_on_fake_router():
     after = P.read_devices(r, r.running_config())
     assert not P.verify_assign(after, list(devs), "Policy0")
     assert P.parse_policies(r.running_config())["Policy0"].description == "Дети"
+
+
+def test_edit_and_delete_on_fake_router():
+    r = FakeRouter(CFG)
+    pols = P.parse_policies(r.running_config())
+    want = P.Policy("Policy2", "ТВ", ["Wireguard3", "PPPoE0"])
+    cmds, summary = P.edit_cmds(pols["Policy2"], want)
+    assert len(summary) == 2
+    r.run(cmds)
+    assert not P.verify_policy(P.parse_policies(r.running_config()), "Policy2", want)
+    devs = P.parse_devices(r.running_config())
+    cmds, summary = P.delete_cmds(P.parse_policies(r.running_config())["Policy2"], devs)
+    assert cmds == ["no ip hotspot host 60:ab:14:95:96:78 policy", "no ip policy Policy2"]
+    r.run(cmds)
+    after = r.running_config()
+    assert not P.verify_policy(P.parse_policies(after), "Policy2", None)
+    assert P.parse_devices(after)["60:ab:14:95:96:78"].policy == ""
