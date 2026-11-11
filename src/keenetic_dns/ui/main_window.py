@@ -146,7 +146,8 @@ class MainWindow(QMainWindow):
         head.addWidget(ic)
         head.addSpacing(4)
         head.addWidget(_label("KeenRoute", "brand"), 1)
-        self.conn_pill = _label("Подключено", "pill")
+        self.conn_pill = self._dot(COL["ok"], 9)
+        self.conn_pill.setToolTip("Подключено к роутеру")
         head.addWidget(self.conn_pill)
         lay.addLayout(head)
 
@@ -488,18 +489,23 @@ class MainWindow(QMainWindow):
 
         # контекстная панель: появляется, когда отмечены списки
         self.actionbar = QFrame(objectName="actionbar")
-        ab = QHBoxLayout(self.actionbar)
-        ab.setContentsMargins(12, 8, 8, 8)
-        ab.setSpacing(6)
+        av = QVBoxLayout(self.actionbar)
+        av.setContentsMargins(12, 8, 8, 8)
+        av.setSpacing(6)
+        top = QHBoxLayout()
+        top.setSpacing(8)
         self.sel_label = _label("Отметьте списки галочками", "h2")
-        ab.addWidget(self.sel_label)
-        ab.addSpacing(6)
+        top.addWidget(self.sel_label)
+        top.addWidget(_label("→ шлюз", "muted"))
         self.gw = QComboBox()
-        self.gw.setMinimumWidth(170)
+        self.gw.setMinimumWidth(180)
         self.gw.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.gw.setMinimumContentsLength(14)
-        self.gw.setToolTip("Шлюз для «Назначить» и «Перевести ВСЕ»")
-        ab.addWidget(self.gw)
+        self.gw.setToolTip("Шлюз для «Назначить» и «Все на шлюз»")
+        top.addWidget(self.gw)
+        top.addStretch(1)
+        top.addWidget(_btn("", self._clear_checks, "icon", "Снять выбор", ic="close"))
+        av.addLayout(top)
         self.sel_buttons = [
             _btn("Назначить", self.assign_selected, "primary", "Назначить выбранный шлюз отмеченным спискам"),
             _btn("Снять шлюз", self.unassign_selected),
@@ -507,15 +513,15 @@ class MainWindow(QMainWindow):
                  "список и домены остаются, шлюз запоминается", ic="pause"),
             _btn("Включить", self.enable_selected, tip="Вернуть выключенные списки на их шлюз", ic="play"),
             _btn("Разделить…", self.split_dialog, tip="Распределить отмеченные списки по разным шлюзам"),
-            _btn("", self.export_dialog, "icon", "Экспорт отмеченных", ic="export"),
-            _btn("", self.delete_groups, "icon", "Удалить отмеченные", ic="trash"),
+            _btn("Экспорт", self.export_dialog, tip="Экспорт отмеченных в файл", ic="export"),
+            _btn("Удалить", self.delete_groups, "danger", ic="trash"),
         ]
-        for b in self.sel_buttons:
-            ab.addWidget(b)
-        ab.addStretch(1)
         self.btn_all = _btn("Все на шлюз", self.assign_all, tip="Перевести все списки на выбранный шлюз")
-        ab.addWidget(self.btn_all)
-        ab.addWidget(_btn("", self._clear_checks, "icon", "Снять выбор", ic="close"))
+        btns = QWidget()
+        flow = FlowLayout(btns, spacing=6)  # кнопки переносятся, а не сжимаются
+        for b in self.sel_buttons + [self.btn_all]:
+            flow.addWidget(b)
+        av.addWidget(btns)
         self.actionbar.hide()
         lay.addWidget(self.actionbar)
         outer.addWidget(w, 1)
@@ -543,7 +549,9 @@ class MainWindow(QMainWindow):
         self.ed_info = _label("Кликните по строке в таблице", "muted")
         self.ed_info.setWordWrap(True)
         lay.addWidget(self.ed_info)
-        lay.addWidget(_label("Домены и подсети — по одному в строке; поддомены роутер ловит сам", "muted"))
+        hint = _label("Домены и подсети — по одному в строке. Поддомены роутер ловит сам.", "muted")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
         self.editor = QPlainTextEdit(placeholderText="example.com\nsub.example.org\n203.0.113.0/24")
         self.editor.setEnabled(False)
         self._hl = DomainHighlighter(self.editor.document())
