@@ -94,26 +94,41 @@ class PreviewDialog(QDialog):
     def __init__(self, cmds: list[str], parent=None, summary: list[str] | None = None):
         super().__init__(parent)
         self.setWindowTitle("Предпросмотр изменений")
-        self.resize(680, 460)
+        self.resize(640, 460)
         lay = QVBoxLayout(self)
+        lay.setContentsMargins(20, 18, 20, 16)
         lay.setSpacing(10)
         n = len([c for c in cmds if c != "system configuration save"])
-        head = QLabel("Что изменится на роутере")
-        head.setObjectName("h2")
+        head = QLabel("Предпросмотр изменений")
+        head.setObjectName("title")
         lay.addWidget(head)
+        sub = QLabel("Перед применением сделаю бэкап, после — проверю конфигурацию роутера; при ошибке предложу откат.")
+        sub.setObjectName("muted")
+        sub.setWordWrap(True)
+        lay.addWidget(sub)
+        badges = QHBoxLayout()
+        badges.setSpacing(6)
+        lines = summary or []
+        for sign, obj, word in (("+", "badgeAdd", "добавится"), ("~", "badgeMod", "изменится"), ("−", "badgeDel", "удалится")):
+            k = sum(1 for x in lines if x[:1] == sign)
+            if k:
+                b = QLabel(f"{sign} {k} {word}")
+                b.setObjectName(obj)
+                badges.addWidget(b)
+        cnt = QLabel(f"{n} команд")
+        cnt.setObjectName("badge")
+        badges.addWidget(cnt)
+        badges.addStretch(1)
+        lay.addLayout(badges)
         lst = QListWidget()
-        colors = {"+": "#3fb950", "−": "#f85149", "~": "#d29922"}
+        from .theme import C as COL
+        colors = {"+": COL["ok"], "−": COL["bad"], "~": COL["warn"]}
         for line in summary or []:
             it = QListWidgetItem(line)
             if line[:1] in colors:
                 it.setForeground(QColor(colors[line[:1]]))
             lst.addItem(it)
         lay.addWidget(lst, 1)
-        info = QLabel(f"Команд: {n}. Перед применением будет сделан бэкап, после — проверка; "
-                      "при ошибке программа предложит откат.")
-        info.setObjectName("muted")
-        info.setWordWrap(True)
-        lay.addWidget(info)
         self.txt = QPlainTextEdit("\n".join(cmds))
         self.txt.setReadOnly(True)
         self.txt.setVisible(not summary)

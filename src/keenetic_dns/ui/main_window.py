@@ -1,4 +1,4 @@
-"""Главное окно (тёмный стиль Termius / Windows 11)."""
+"""Главное окно KeenRoute 2.0: меню слева, страницы справа."""
 from __future__ import annotations
 
 import copy
@@ -8,10 +8,10 @@ import os
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-                               QFileDialog, QFrame, QHBoxLayout, QHeaderView, QInputDialog, QLabel,
-                               QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
-                               QPlainTextEdit, QPushButton, QSplitter, QTableWidget, QTabWidget, QTableWidgetItem, QVBoxLayout,
-                               QWidget)
+                               QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QInputDialog, QLabel,
+                               QLineEdit, QListView, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
+                               QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QStackedWidget, QTableWidget,
+                               QTableWidgetItem, QVBoxLayout, QWidget)
 
 from ..api.rci import RCIClient
 from ..core import catalog as K
@@ -39,7 +39,7 @@ def _btn(text, fn, obj=None, tip=None, ic=None):
     if obj:
         b.setObjectName(obj)
     if ic:
-        set_icon(b, ic, obj if obj in ("primary", "danger") else None)
+        set_icon(b, ic, obj if obj in ("primary", "danger", "strong") else None)
     if tip:
         b.setToolTip(tip)
     b.setCursor(Qt.PointingHandCursor)
@@ -68,199 +68,411 @@ class MainWindow(QMainWindow):
         self.db = K.DomainDB()
         self.sources = K.SourceStore()
         self.disabled = K.DisabledStore()
+        from ..core.history import HistoryStore
+        self.history = HistoryStore()
+        self.devices = None
         self._on_success = None  # что сделать после успешного применения (запомнить выключенные и т.п.)
         try:
             self.templates = K.load_templates()
         except Exception:  # noqa: BLE001
             log.exception("Шаблоны не загрузились")
             self.templates = []
-        self.resize(1280, 760)
-        self.setMinimumSize(900, 560)
+        self.resize(1360, 820)
+        self.setMinimumSize(1000, 600)
         self._build()
         dark_titlebar(self)
         self.refresh()
         self._check_updates_quiet()
 
 
-    # ---------- построение UI ----------
+    # ---------- построение UI (KeenRoute 2.0: меню слева, страницы справа) ----------
+    PAGES = [("overview", "Обзор", "grid"), ("routing", "Маршрутизация", "route"),
+             ("catalog", "Каталог сервисов", "catalog"), ("dns", "DNS · DoT · DoH", "lock"),
+             ("policies", "Политики", "monitor"), ("history", "История изменений", "history"),
+             ("backups", "Резервные копии", "save")]
+
     def _build(self):
         self.setWindowIcon(app_icon())
-        split = QSplitter(Qt.Horizontal)
-        split.setChildrenCollapsible(False)
-        split.setHandleWidth(1)
-        split.addWidget(self._sidebar())
-        # вкладки: маршрутизация DNS (списки) и DoT / DoH
-        routing = QSplitter(Qt.Horizontal)
-        routing.setChildrenCollapsible(False)
-        routing.setHandleWidth(1)
-        routing.addWidget(self._main())
-        routing.addWidget(self._editor_panel())
-        routing.setStretchFactor(0, 1)
-        routing.setStretchFactor(1, 0)
-        routing.setSizes([760, 300])
         from .dns_dialog import DnsPanel
+        from .policy_panel import PolicyPanel
         try:
             providers = D.load_providers()
         except Exception:  # noqa: BLE001
             log.exception("Шаблоны DNS не загрузились")
             providers = []
         self.dns_panel = DnsPanel(self, providers, self.apply_dns)
-        from .policy_panel import PolicyPanel
         self.policy_panel = PolicyPanel(self, self.apply_policy, self.change_policy)
-        self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(True)
-        self.tabs.setObjectName("pages")
-        self.tabs.addTab(routing, icon("route"), "Маршрутизация DNS")
-        self.tabs.addTab(self.dns_panel, icon("lock"), "DoT / DoH")
-        self.tabs.addTab(self.policy_panel, icon("monitor"), "Политики")
-        self.tabs.currentChanged.connect(self._on_tab)
-        split.addWidget(self.tabs)
-        split.setStretchFactor(0, 0)
-        split.setStretchFactor(1, 1)
-        split.setSizes([250, 1060])
-        self.setCentralWidget(split)
+
+        root = QWidget(objectName="central")
+        rl = QHBoxLayout(root)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(0)
+        rl.addWidget(self._sidebar())
+        content = QWidget(objectName="page")
+        cl = QVBoxLayout(content)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(0)
+        cl.addWidget(self._topbar())
+        self.tabs = QStackedWidget(objectName="pages")  # имя оставлено для совместимости
+        self.page_index = {}
+        for key, widget in [("overview", self._overview_page()), ("routing", self._routing_page()),
+                            ("dns", self._wrap(self.dns_panel)), ("policies", self._wrap(self.policy_panel)),
+                            ("history", self._history_page()), ("backups", self._backups_page())]:
+            self.page_index[key] = self.tabs.addWidget(widget)
+        cl.addWidget(self.tabs, 1)
+        rl.addWidget(content, 1)
+        self.setCentralWidget(root)
         self.statusBar().showMessage("Готово")
+        self.go("routing")
+
+    @staticmethod
+    def _wrap(panel: QWidget) -> QWidget:
+        w = QWidget(objectName="page")
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(4, 4, 4, 0)
+        lay.addWidget(panel)
+        return w
 
     def _sidebar(self) -> QWidget:
         w = QWidget(objectName="sidebar")
-        w.setMinimumWidth(200)
-        w.setMaximumWidth(380)
+        w.setFixedWidth(240)
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(14, 16, 14, 12)
-        lay.setSpacing(8)
+        lay.setContentsMargins(12, 14, 12, 10)
+        lay.setSpacing(2)
         head = QHBoxLayout()
+        head.setContentsMargins(4, 0, 2, 10)
         ic = QLabel()
-        ic.setPixmap(app_icon().pixmap(28, 28))
+        ic.setPixmap(app_icon().pixmap(26, 26))
         head.addWidget(ic)
+        head.addSpacing(4)
         head.addWidget(_label("KeenRoute", "brand"), 1)
+        self.conn_pill = _label("Подключено", "pill")
+        head.addWidget(self.conn_pill)
+        lay.addLayout(head)
+
+        self.nav_buttons = {}
+        groups = [("РАБОТА", self.PAGES[:5]), ("УПРАВЛЕНИЕ", self.PAGES[5:])]
+        for caption, items in groups:
+            cap = _label(caption, "caption")
+            cap.setContentsMargins(10, 12, 0, 4)
+            lay.addWidget(cap)
+            for key, text, ic_name in items:
+                b = QPushButton(text, objectName="navitem")
+                set_icon(b, ic_name, "muted")
+                b.setCheckable(key != "catalog")
+                b.setCursor(Qt.PointingHandCursor)
+                b.clicked.connect(lambda _=False, k=key: self.go(k))
+                self.nav_buttons[key] = b
+                lay.addWidget(b)
+        lay.addStretch(1)
+
+        self.upd_btn = _btn("", self.open_updates, "primary")
+        self.upd_btn.setVisible(False)
+        lay.addWidget(self.upd_btn)
+        lay.addSpacing(6)
+        self.router_btn = QPushButton(objectName="routercard")
+        set_icon(self.router_btn, "router")
+        self.router_btn.setToolTip("Сменить роутер")
+        self.router_btn.setCursor(Qt.PointingHandCursor)
+        self.router_btn.clicked.connect(self.switch_router)
+        self.router_name = _label("", "h2")      # для совместимости: текст кнопки собирается из них
+        self.router_info = _label("", "muted")
+        lay.addWidget(self.router_btn)
+        self._show_router()
+
         from ..core import settings as S
         self.theme_btn = _btn("", self.toggle_theme, "icon", ic="theme")
         self._theme_tip(S.load().get("theme", "auto"))
         self.upd_small = _btn("", self.open_updates, "icon", "Обновления программы", ic="update")
         self.lnk_btn = _btn("", self.make_shortcut, "icon", "Ярлык на рабочий стол и в меню «Пуск»", ic="monitor")
-        for b in (self.lnk_btn, self.theme_btn, self.upd_small):
+        foot = QHBoxLayout()
+        foot.setContentsMargins(0, 8, 2, 0)
+        foot.setSpacing(2)
+        for b in (self.theme_btn, self.lnk_btn, self.upd_small):
             b.setFixedSize(34, 34)
-        lay.addLayout(head)
-
-        card = QFrame(objectName="card")
-        cl = QVBoxLayout(card)
-        cl.setContentsMargins(12, 10, 12, 10)
-        cl.setSpacing(2)
-        self.router_name = _label("", "h2")
-        self.router_info = _label("", "muted")
-        self.router_info.setWordWrap(True)
-        cl.addWidget(self.router_name)
-        cl.addWidget(self.router_info)
-        cl.addSpacing(6)
-        cl.addWidget(_btn("Сменить роутер", self.switch_router, ic="swap"))
-        self._show_router()
-        lay.addWidget(card)
-
-        self.upd_btn = _btn("", self.open_updates, "primary")
-        self.upd_btn.setVisible(False)
-        lay.addWidget(self.upd_btn)
-        lay.addSpacing(4)
-        self.route_cap = _label("ШЛЮЗЫ", "caption")
-        lay.addWidget(self.route_cap)
-        self.iflist = GatewayList(None)  # источник drag — таблица, задаётся после её создания
-        self.iflist.dropped.connect(self._on_drop)
-        self.iflist.setToolTip("Перетащите сюда строки таблицы — списки переедут на этот шлюз")
-        self.iflist.setCursor(Qt.PointingHandCursor)
-        self.iflist.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.iflist.setTextElideMode(Qt.ElideRight)
-        self.iflist.currentItemChanged.connect(self._on_filter)
-        lay.addWidget(self.iflist, 1)
-        self.route_spacer = QWidget()  # занимает место списка шлюзов на вкладке DoT / DoH
-        lay.addWidget(self.route_spacer, 1)
-        self.route_spacer.hide()
-
-        lay.addWidget(_label("ДЕЙСТВИЯ", "caption"))
-        for ic, text, fn, tip in [
-            ("catalog", "Каталог сервисов", self.open_catalog, "Шаблоны и поиск по базе доменов"),
-            ("import", "Импорт из файла", self.import_dialog, "Загрузить списки из .json или .txt"),
-            ("export", "Экспорт в файл", self.export_dialog, "Сохранить отмеченные (или все) списки в файл"),
-            ("save", "Создать бэкап", self.make_backup, "Сохранить конфигурацию роутера в файл"),
-            ("restore", "Восстановить из бэкапа", self.restore_backup, "Вернуть списки и маршруты из файла бэкапа"),
-        ]:
-            lay.addWidget(_btn(text, fn, "nav", tip, ic=ic))
-        # служебное — внизу панели, как в Termius / VS Code
-        foot = QFrame(objectName="footer")
-        fh = QHBoxLayout(foot)
-        fh.setContentsMargins(0, 8, 0, 0)
-        fh.setSpacing(4)
-        for b in (self.lnk_btn, self.theme_btn, self.upd_small):
-            fh.addWidget(b)
-        fh.addStretch(1)
+            foot.addWidget(b)
+        foot.addStretch(1)
         from .. import __version__
         ver = _label(f"v{__version__}", "muted")
         ver.setToolTip("Версия программы")
-        fh.addWidget(ver)
-        lay.addWidget(foot)
+        foot.addWidget(ver)
+        lay.addLayout(foot)
         return w
 
-    def _main(self) -> QWidget:
-        w = QWidget(objectName="central")
-        w.setMinimumWidth(460)
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(20, 16, 20, 12)
-        lay.setSpacing(10)
+    def _topbar(self) -> QWidget:
+        bar = QWidget(objectName="topbar")
+        bar.setFixedHeight(56)
+        h = QHBoxLayout(bar)
+        h.setContentsMargins(24, 0, 20, 0)
+        h.setSpacing(8)
+        self.crumb_router = _label("Дом", "crumb")
+        h.addWidget(self.crumb_router)
+        h.addWidget(_label("›", "crumb"))
+        self.crumb_page = _label("", "crumbNow")
+        h.addWidget(self.crumb_page)
+        h.addStretch(1)
+        self.check = QLineEdit(placeholderText="Куда пойдёт сайт? Домен или слово + Enter")
+        lead_icon(self.check, "search")
+        self.check.setFixedWidth(340)
+        self.check.setToolTip("Введите адрес сайта (m.youtube.com) и нажмите Enter — покажу, в каком он списке и через "
+                              "какой шлюз пойдёт. Слово (youtube) — найду списки с ним.")
+        self.check.returnPressed.connect(lambda: self.check_domain(self.check.text()))
+        h.addWidget(self.check)
+        h.addWidget(_btn("", self.refresh, "icon", "Перечитать роутер", ic="refresh"))
+        return bar
 
+    def go(self, key: str):
+        """Перейти на страницу из меню. «Каталог» открывается окном поверх маршрутизации."""
+        if key == "catalog":
+            self.go("routing")
+            return self.open_catalog()
+        if key not in self.page_index:
+            return
+        self.tabs.setCurrentIndex(self.page_index[key])
+        self.current_page = key
+        titles = {k: t for k, t, _ in self.PAGES}
+        self.crumb_page.setText(titles.get(key, ""))
+        for k, b in self.nav_buttons.items():
+            b.setChecked(k == key)
+        if key == "overview":
+            self._render_overview()
+        elif key == "history":
+            self._render_history()
+        elif key == "backups":
+            self._render_backups()
+
+    # --- общие кусочки страниц ---
+    @staticmethod
+    def _page_head(title: str, sub: str, *buttons) -> tuple[QHBoxLayout, QLabel, QLabel]:
+        row = QHBoxLayout()
+        row.setSpacing(8)
         tl = QVBoxLayout()
-        tl.setSpacing(0)
-        self.title = _label("Все списки", "title")
-        self.subtitle = _label("", "muted")
-        tl.addWidget(self.title)
-        tl.addWidget(self.subtitle)
-        lay.addLayout(tl)
+        tl.setSpacing(2)
+        t = _label(title, "title")
+        s = _label(sub, "muted")
+        s.setWordWrap(True)
+        tl.addWidget(t)
+        tl.addWidget(s)
+        row.addLayout(tl, 1)
+        for b in buttons:
+            row.addWidget(b, 0, Qt.AlignBottom)
+        return row, t, s
 
-        self.search = QLineEdit(placeholderText="Поиск по спискам и доменам")
+    @staticmethod
+    def _dot(color: str, size: int = 8) -> QLabel:
+        d = QLabel()
+        d.setFixedSize(size, size)
+        d.setStyleSheet(f"background: {color}; border-radius: {size // 2}px;")
+        return d
+
+    def _list_row(self, color, title, sub="", right="", button=None) -> QFrame:
+        f = QFrame(objectName="row")
+        h = QHBoxLayout(f)
+        h.setContentsMargins(16, 10, 16, 10)
+        h.setSpacing(12)
+        h.addWidget(self._dot(color), 0, Qt.AlignVCenter)
+        v = QVBoxLayout()
+        v.setSpacing(0)
+        t = _label(title)
+        t.setStyleSheet("font-weight: 600;")
+        t.setWordWrap(True)
+        v.addWidget(t)
+        if sub:
+            s = _label(sub, "muted")
+            s.setWordWrap(True)
+            v.addWidget(s)
+        h.addLayout(v, 1)
+        if right:
+            h.addWidget(_label(right, "muted"))
+        if button:
+            h.addWidget(button)
+        return f
+
+    @staticmethod
+    def _card(title: str = "", right: QWidget | None = None) -> tuple[QFrame, QVBoxLayout]:
+        card = QFrame(objectName="card")
+        v = QVBoxLayout(card)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+        if title:
+            head = QFrame(objectName="row")
+            hh = QHBoxLayout(head)
+            hh.setContentsMargins(16, 12, 16, 12)
+            lb = _label(title, "h2")
+            hh.addWidget(lb, 1)
+            if right:
+                hh.addWidget(right)
+            v.addWidget(head)
+        body = QVBoxLayout()
+        body.setSpacing(0)
+        v.addLayout(body)
+        return card, body
+
+    @staticmethod
+    def _clear(lay):
+        while lay.count():
+            it = lay.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+
+    # --- Обзор ---
+    def _overview_page(self) -> QWidget:
+        w = QWidget(objectName="page")
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(16)
+        head, _, self.ov_sub = self._page_head("Обзор", "")
+        lay.addLayout(head)
+        grid = QGridLayout()
+        grid.setSpacing(12)
+        self.ov_stats = []
+        for i in range(4):
+            card = QFrame(objectName="card")
+            v = QVBoxLayout(card)
+            v.setContentsMargins(16, 14, 16, 14)
+            v.setSpacing(4)
+            cap, val, note = _label("", "muted"), _label("", "statValue"), _label("", "statNote")
+            for x in (cap, val, note):
+                v.addWidget(x)
+            grid.addWidget(card, 0, i)
+            self.ov_stats.append((cap, val, note))
+        lay.addLayout(grid)
+        two = QHBoxLayout()
+        two.setSpacing(12)
+        self.ov_gw_count = _label("", "muted")
+        gcard, self.ov_gw = self._card("Туннели и шлюзы", self.ov_gw_count)
+        hcard, self.ov_hist = self._card("Последние изменения",
+                                         _btn("Вся история", lambda: self.go("history"), "link"))
+        two.addWidget(gcard, 1)
+        two.addWidget(hcard, 1)
+        lay.addLayout(two)
+        acard, self.ov_att = self._card("Требует внимания")
+        lay.addWidget(acard)
+        lay.addStretch(1)
+        return w
+
+    def _render_overview(self):
+        if not hasattr(self, "ov_stats"):
+            return
+        addr = self.c.base.replace("http://", "").replace(":80", "")
+        self.ov_sub.setText(f"{self.host.get('name') or self.model} · {addr} · {self.model} · NDMS {self.ndms}")
+        key = self._router_key()
+        off = self.disabled.for_router(key)
+        n_off = sum(1 for n in off if n in self.groups and not self.groups[n].interface)
+        total_dom = sum(len(g.domains) for g in self.groups.values())
+        tun = [i for i in self.ifaces if i.type.lower() in ("wireguard", "openvpn", "ike", "sstp", "l2tp", "pptp")]
+        up = sum(1 for i in tun if i.up)
+        dns = getattr(self, "dns", [])
+        stats = [
+            ("DNS-списков", str(len(self.groups)), f"{len(self.groups) - n_off} работают" + (f" · {n_off} выключен" if n_off else ""), COL["muted"]),
+            ("Доменов и подсетей", str(total_dom), "поддомены роутер ловит сам", COL["muted"]),
+            ("Туннели", f"{up} / {len(tun)}" if tun else "—", "все в сети" if tun and up == len(tun) else
+             (f"{len(tun) - up} не в сети" if tun else "VPN-подключений нет"), COL["ok"] if tun and up == len(tun) else COL["warn"]),
+            ("DoT · DoH", f"{D.count_kind(dns, 'dot')} · {D.count_kind(dns, 'doh')}", "из 8 записей каждого", COL["muted"]),
+        ]
+        for (cap, val, note), (c, v, n, col) in zip(self.ov_stats, stats):
+            cap.setText(c)
+            val.setText(v)
+            note.setText(n)
+            note.setStyleSheet(f"color: {col};")
+        self._clear(self.ov_gw)
+        self.ov_gw_count.setText(f"{up} из {len(tun)} в сети" if tun else "")
+        for i in sorted(self.ifaces, key=lambda x: (not x.is_wg, x.name)):
+            n = sum(1 for g in self.groups.values() if g.interface == i.name)
+            if not (i.is_wg or n):
+                continue
+            cc = getattr(self, "_country", {}).get(i.name, "")
+            self.ov_gw.addWidget(self._list_row(COL["ok"] if i.up else COL["bad"], i.short,
+                                                f"{i.name} · {i.type}" + (f" · {cc}" if cc else ""),
+                                                f"{n} спис." if n else "нет списков"))
+        self._clear(self.ov_hist)
+        items = self.history.for_router(key)[:4]
+        from ..core.history import human_when
+        for h in items:
+            self.ov_hist.addWidget(self._list_row(COL["accentText"], h["title"], (h["lines"] or [""])[0], human_when(h["at"])))
+        if not items:
+            self.ov_hist.addWidget(self._list_row(COL["muted"], "Пока ничего не применялось",
+                                                  "Изменения, сделанные в KeenRoute, появятся здесь"))
+        self._clear(self.ov_att)
+        att = []
+        for i in tun:
+            if not i.up:
+                att.append((COL["bad"], f"{i.short} не в сети", "К шлюзам", lambda: self.go("routing")))
+        for n in off:
+            g = self.groups.get(n)
+            if g and not g.interface:
+                att.append((COL["warn"], f"«{g.title}» выключен — домены идут напрямую", "Открыть", lambda: self.go("routing")))
+        import time
+        age = (time.time() - self.db.updated) / 86400 if self.db.updated else None
+        if age is None or age > 7:
+            att.append((COL["muted"], "База доменов не скачана" if age is None else f"База доменов обновлялась {int(age)} дн. назад",
+                        "В каталог", self.open_catalog))
+        for color, text, btn_text, fn in att:
+            self.ov_att.addWidget(self._list_row(color, text, button=_btn(btn_text, fn)))
+        if not att:
+            self.ov_att.addWidget(self._list_row(COL["ok"], "Всё в порядке", "Туннели в сети, выключенных списков нет"))
+
+    # --- Маршрутизация ---
+    def _routing_page(self) -> QWidget:
+        page = QWidget(objectName="page")
+        outer = QHBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        w = QWidget(objectName="page")
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(12)
+        head, self.title, self.subtitle = self._page_head(
+            "Маршрутизация DNS", "",
+            _btn("", self.import_dialog, "icon", "Импорт из файла", ic="import"),
+            _btn("", self.export_dialog, "icon", "Экспорт в файл", ic="export"),
+            _btn("Из каталога", self.open_catalog, None, "Шаблоны и база из 1500+ сервисов", ic="catalog"),
+            _btn("Новый список", self.new_group, "strong", ic="plus"))
+        lay.addLayout(head)
+
+        self.iflist = GatewayList(None)  # фильтр-чипы по шлюзам; на них можно перетащить строки таблицы
+        self.iflist.setObjectName("chips")
+        self.iflist.setFlow(QListView.LeftToRight)
+        self.iflist.setWrapping(True)
+        self.iflist.setResizeMode(QListView.Adjust)
+        self.iflist.setFixedHeight(42)
+        self.iflist.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.iflist.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.iflist.setToolTip("Фильтр по шлюзу. Перетащите сюда строки таблицы — списки переедут на этот шлюз")
+        self.iflist.setCursor(Qt.PointingHandCursor)
+        self.iflist.dropped.connect(self._on_drop)
+        self.iflist.currentItemChanged.connect(self._on_filter)
+        lay.addWidget(self.iflist)
+        self.route_spacer = QWidget()  # совместимость со старым кодом
+        self.route_spacer.hide()
+
+        tools = QHBoxLayout()
+        tools.setSpacing(8)
+        self.search = QLineEdit(placeholderText="Фильтр по названию или домену")
         lead_icon(self.search, "search")
-        self.search.setMinimumWidth(160)
         self.search.textChanged.connect(self._apply_filter)
+        tools.addWidget(self.search, 1)
         self.chk_all = QCheckBox("Выбрать все")
         self.chk_all.setCursor(Qt.PointingHandCursor)
         self.chk_all.clicked.connect(self._check_all)
-        self.check = QLineEdit(placeholderText="Куда пойдёт сайт? Например: m.youtube.com + Enter")
-        lead_icon(self.check, "compass")
-        self.check.setMinimumWidth(160)
-        self.check.setToolTip("Введите адрес сайта (m.youtube.com, chatgpt.com) и нажмите Enter — покажу, в каком он "
-                              "списке и через какой шлюз пойдёт. Можно ввести и слово (youtube) — найду списки с ним.")
-        self.check.returnPressed.connect(lambda: self.check_domain(self.check.text()))
-        # строка 1 — действия со списками, строка 2 — поиск и проверка
-        tools = QWidget()
-        fl = FlowLayout(tools)
-        for wd in (_btn("Каталог", self.open_catalog, "primary", "Добавить сервисы из шаблонов и базы доменов",
-                        ic="catalog"),
-                   _btn("Новый список", self.new_group, ic="plus"),
-                   _btn("Разбить большие", self.split_big, tip="Разделить списки, превышающие лимит доменов",
-                        ic="split"),
-                   _btn("Обновить", self.refresh, tip="Перечитать роутер", ic="refresh")):
-            fl.addWidget(wd)
-        lay.addWidget(tools)
-        finder = QHBoxLayout()
-        finder.setSpacing(8)
-        finder.addWidget(self.search, 3)
-        finder.addWidget(self.check, 2)
-        lay.addLayout(finder)
-        sel = QHBoxLayout()
-        sel.setContentsMargins(4, 4, 0, 0)
-        sel.addWidget(self.chk_all)
-        sel.addStretch(1)
-        lay.addLayout(sel)
+        tools.addWidget(self.chk_all)
+        tools.addWidget(_btn("Разбить большие", self.split_big, tip="Разделить списки, превышающие лимит доменов",
+                             ic="split"))
+        lay.addLayout(tools)
 
         self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["", "СПИСОК", "ДОМЕНОВ", "ШЛЮЗ", "СТАТУС"])
+        self.table.setHorizontalHeaderLabels(["", "Список", "Доменов", "Шлюз", "Статус"])
         hh = self.table.horizontalHeader()
         hh.setSectionResizeMode(QHeaderView.ResizeToContents)
         hh.setSectionResizeMode(COL_NAME, QHeaderView.Stretch)
         hh.setSectionResizeMode(COL_GW, QHeaderView.Interactive)
-        hh.setMinimumSectionSize(36)
+        hh.setMinimumSectionSize(40)
         hh.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.table.setColumnWidth(COL_GW, 190)
+        self.table.setColumnWidth(COL_GW, 210)
         self.table.setTextElideMode(Qt.ElideRight)
         self.table.setWordWrap(False)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(44)
+        self.table.verticalHeader().setDefaultSectionSize(46)
         self.table.setShowGrid(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -274,54 +486,64 @@ class MainWindow(QMainWindow):
         self.iflist._source = self.table
         lay.addWidget(self.table, 1)
 
-        # панель действий над отмеченными (кнопки переносятся при узком окне)
-        bar = QFrame(objectName="actionbar")
-        bv = QVBoxLayout(bar)
-        bv.setContentsMargins(14, 10, 14, 10)
-        bv.setSpacing(8)
-        row = QHBoxLayout()
+        # контекстная панель: появляется, когда отмечены списки
+        self.actionbar = QFrame(objectName="actionbar")
+        ab = QHBoxLayout(self.actionbar)
+        ab.setContentsMargins(12, 8, 8, 8)
+        ab.setSpacing(6)
         self.sel_label = _label("Отметьте списки галочками", "h2")
-        row.addWidget(self.sel_label)
-        row.addStretch(1)
-        row.addWidget(_label("Шлюз:", "muted"))
+        ab.addWidget(self.sel_label)
+        ab.addSpacing(6)
         self.gw = QComboBox()
         self.gw.setMinimumWidth(170)
         self.gw.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self.gw.setMinimumContentsLength(16)
-        row.addWidget(self.gw)
-        bv.addLayout(row)
-        btns = QWidget()
-        bf = FlowLayout(btns)
+        self.gw.setMinimumContentsLength(14)
+        self.gw.setToolTip("Шлюз для «Назначить» и «Перевести ВСЕ»")
+        ab.addWidget(self.gw)
         self.sel_buttons = [
-            _btn("Назначить шлюз", self.assign_selected, "primary", "Назначить выбранный шлюз отмеченным спискам"),
+            _btn("Назначить", self.assign_selected, "primary", "Назначить выбранный шлюз отмеченным спискам"),
             _btn("Снять шлюз", self.unassign_selected),
             _btn("Выключить", self.disable_selected, tip="Временно отключить: домены пойдут напрямую, "
                  "список и домены остаются, шлюз запоминается", ic="pause"),
             _btn("Включить", self.enable_selected, tip="Вернуть выключенные списки на их шлюз", ic="play"),
-            _btn("Разделение…", self.split_dialog, tip="Распределить отмеченные списки по разным шлюзам"),
-            _btn("Экспорт", self.export_dialog, ic="export"),
-            _btn("Удалить", self.delete_groups, "danger", ic="trash"),
+            _btn("Разделить…", self.split_dialog, tip="Распределить отмеченные списки по разным шлюзам"),
+            _btn("", self.export_dialog, "icon", "Экспорт отмеченных", ic="export"),
+            _btn("", self.delete_groups, "icon", "Удалить отмеченные", ic="trash"),
         ]
         for b in self.sel_buttons:
-            bf.addWidget(b)
-        bf.addWidget(_btn("Перевести ВСЕ на шлюз", self.assign_all, tip="Все списки на выбранный шлюз"))
-        bv.addWidget(btns)
-        lay.addWidget(bar)
-        return w
+            ab.addWidget(b)
+        ab.addStretch(1)
+        self.btn_all = _btn("Все на шлюз", self.assign_all, tip="Перевести все списки на выбранный шлюз")
+        ab.addWidget(self.btn_all)
+        ab.addWidget(_btn("", self._clear_checks, "icon", "Снять выбор", ic="close"))
+        self.actionbar.hide()
+        lay.addWidget(self.actionbar)
+        outer.addWidget(w, 1)
+        outer.addWidget(self._editor_panel())
+        return page
 
     def _editor_panel(self) -> QWidget:
-        w = QWidget(objectName="sidebar")
-        w.setMinimumWidth(220)
-        w.setMaximumWidth(520)
+        self.detail = QWidget(objectName="detail")
+        w = self.detail
+        w.setFixedWidth(340)
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(14, 16, 14, 12)
-        lay.setSpacing(8)
-        lay.addWidget(_label("ДОМЕНЫ", "caption"))
+        lay.setContentsMargins(18, 18, 18, 14)
+        lay.setSpacing(10)
+        top = QHBoxLayout()
+        tv = QVBoxLayout()
+        tv.setSpacing(0)
+        self.ed_caption = _label("", "caption")
         self.ed_title = _label("Выберите список", "h2")
+        self.ed_title.setWordWrap(True)
+        tv.addWidget(self.ed_caption)
+        tv.addWidget(self.ed_title)
+        top.addLayout(tv, 1)
+        top.addWidget(_btn("", self._close_detail, "icon", "Закрыть панель", ic="close"), 0, Qt.AlignTop)
+        lay.addLayout(top)
         self.ed_info = _label("Кликните по строке в таблице", "muted")
         self.ed_info.setWordWrap(True)
-        lay.addWidget(self.ed_title)
         lay.addWidget(self.ed_info)
+        lay.addWidget(_label("Домены и подсети — по одному в строке; поддомены роутер ловит сам", "muted"))
         self.editor = QPlainTextEdit(placeholderText="example.com\nsub.example.org\n203.0.113.0/24")
         self.editor.setEnabled(False)
         self._hl = DomainHighlighter(self.editor.document())
@@ -332,7 +554,88 @@ class MainWindow(QMainWindow):
         self.ed_save = _btn("Сохранить домены", self.save_domains, "primary")
         self.ed_save.setEnabled(False)
         lay.addWidget(self.ed_save)
+        w.hide()
         return w
+
+    def _close_detail(self):
+        self.table.clearSelection()
+        self.table.setCurrentCell(-1, -1)
+        self.detail.hide()
+
+    def _clear_checks(self):
+        self._filling = True
+        for r in range(self.table.rowCount()):
+            self.table.item(r, COL_CHK).setCheckState(Qt.Unchecked)
+        self._filling = False
+        self._on_check()
+
+    # --- История и бэкапы ---
+    def _history_page(self) -> QWidget:
+        w = QWidget(objectName="page")
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(16)
+        head, _, _ = self._page_head("История изменений",
+                                     "Всё, что применялось из KeenRoute на этом роутере. Перед каждым шагом — бэкап.")
+        lay.addLayout(head)
+        card, self.hist_body = self._card()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(card)
+        lay.addWidget(scroll, 1)
+        return w
+
+    def _render_history(self):
+        from ..core.history import human_when
+        self._clear(self.hist_body)
+        items = self.history.for_router(self._router_key())
+        bdir = io.app_dir() / "backups"
+        for h in items:
+            path = bdir / h["backup"] if h.get("backup") else None
+            btn = None
+            if h.get("kind") == "lists" and path and path.exists():
+                btn = _btn("Откатить", lambda _=False, p=path: self.restore_from(p),
+                           tip="Вернуть списки и маршруты к состоянию до этого шага")
+            sub = "\n".join(h["lines"][:4]) + (f"\nбэкап {h['backup']}" if h.get("backup") else "")
+            self.hist_body.addWidget(self._list_row(COL["accentText"], f"{h['title']}  ·  {human_when(h['at'])}", sub,
+                                                    button=btn))
+        if not items:
+            self.hist_body.addWidget(self._list_row(COL["muted"], "История пуста",
+                                                    "Изменения, применённые из KeenRoute, появятся здесь"))
+        self.hist_body.addStretch(1)
+
+    def _backups_page(self) -> QWidget:
+        w = QWidget(objectName="page")
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(16)
+        head, _, _ = self._page_head(
+            "Резервные копии", "Создаются автоматически перед каждым изменением. Хранятся последние 50 на этом компьютере.",
+            _btn("Из файла…", self.restore_backup, None, "Восстановить из выбранного файла", ic="restore"),
+            _btn("Создать бэкап", self.make_backup, "primary", ic="save"))
+        lay.addLayout(head)
+        card, self.bk_body = self._card()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(card)
+        lay.addWidget(scroll, 1)
+        return w
+
+    def _render_backups(self):
+        from ..core.history import list_backups
+        self._clear(self.bk_body)
+        prefix = io.backup_name(self.host.get("name") or self.model).rsplit("_", 2)[0] + "_"
+        items = list_backups(prefix)
+        for b in items:
+            self.bk_body.addWidget(self._list_row(
+                COL["muted"], b["name"], f"{b['when']} · {b['size']}",
+                button=_btn("Восстановить", lambda _=False, p=b["path"]: self.restore_from(p))))
+        if not items:
+            self.bk_body.addWidget(self._list_row(COL["muted"], "Бэкапов пока нет",
+                                                  "Нажмите «Создать бэкап» или примените любое изменение"))
+        self.bk_body.addStretch(1)
 
     # ---------- роутер ----------
     def _set_router(self, client, version, host):
@@ -348,6 +651,12 @@ class MainWindow(QMainWindow):
         self.router_name.setText(name or self.model)
         addr = self.c.base.replace("http://", "").replace(":80", "")
         self.router_info.setText((f"{self.model}\n" if name else "") + f"NDMS {self.ndms}\n{addr}")
+        if hasattr(self, "router_btn"):
+            self.router_btn.setText(f"  {name or self.model}\n  {self.model} · NDMS {self.ndms}" if name
+                                    else f"  {self.model}\n  NDMS {self.ndms} · {addr}")
+            self.router_btn.setToolTip(f"{addr} — нажмите, чтобы сменить роутер")
+        if hasattr(self, "crumb_router"):
+            self.crumb_router.setText(name or self.model)
 
     def switch_router(self):
         from .login import LoginDialog
@@ -457,10 +766,13 @@ class MainWindow(QMainWindow):
         self.iflist.blockSignals(False)
         self._apply_filter()
         self._clear_editor()
+        cur_page = getattr(self, "current_page", "routing")
+        if cur_page in ("overview", "history", "backups"):
+            self.go(cur_page)
         self.statusBar().showMessage(f"Списков: {len(self.groups)} · шлюзов: {len(self.ifaces)}", 5000)
 
     def _add_nav(self, text, key, n) -> QListWidgetItem:
-        it = QListWidgetItem(f"{text}  ·  {n}")
+        it = QListWidgetItem(f"{text}   {n}")
         it.setData(Qt.UserRole, key)
         self.iflist.addItem(it)
         return it
@@ -481,11 +793,12 @@ class MainWindow(QMainWindow):
                 ok = q in g.name.lower() or q in g.title.lower() or any(q in d for d in g.domains)
             self.table.setRowHidden(r, not ok)
             shown += ok
-        titles = {ALL: "Все списки", NOGW: "Без шлюза"}
+        titles = {ALL: "все списки", NOGW: "без шлюза"}
         i = self._iface(self._filter)
-        self.title.setText(titles.get(self._filter) or (i.short if i else self._filter))
+        where = titles.get(self._filter) or (i.short if i else self._filter)
         total = sum(len(g.domains) for g in self.groups.values())
-        self.subtitle.setText(f"Показано {shown} из {len(self.groups)} · всего доменов: {total}")
+        self.subtitle.setText(f"{len(self.groups)} списков · {total} доменов. Показано {shown}: {where}. "
+                              "Строки можно перетащить на шлюз выше.")
         self._on_check()
 
     def checked(self) -> list[Group]:
@@ -518,6 +831,7 @@ class MainWindow(QMainWindow):
         self.sel_label.setText(f"Выбрано: {n}" if n else "Отметьте списки галочками")
         for b in self.sel_buttons:
             b.setEnabled(bool(n) or self.table.currentRow() >= 0)
+        self.actionbar.setVisible(bool(n))
 
     def _check_all(self):
         state = Qt.Checked if self.chk_all.checkState() != Qt.Unchecked else Qt.Unchecked
@@ -533,6 +847,8 @@ class MainWindow(QMainWindow):
         it.setCheckState(Qt.Unchecked if it.checkState() == Qt.Checked else Qt.Checked)
 
     def _clear_editor(self):
+        self.detail.hide()
+        self.ed_caption.setText("")
         self.ed_title.setText("Выберите список")
         self.ed_info.setText("Кликните по строке в таблице")
         self.editor.clear()
@@ -545,9 +861,11 @@ class MainWindow(QMainWindow):
             return self._clear_editor()
         g = self.groups[self.table.item(r, COL_CHK).data(Qt.UserRole)]
         i = self._iface(g.interface) if g.interface else None
+        self.detail.show()
+        self.ed_caption.setText(f"OBJECT-GROUP {g.name.upper()}")
         self.ed_title.setText(g.title)
-        self.ed_info.setText(f"Доменов: {len(g.domains)} · шлюз: {i.short if i else (g.interface or 'нет')}"
-                             + (f"\nobject-group: {g.name}" if g.description else ""))
+        self.ed_info.setText(f"Шлюз: {i.short if i else (g.interface or 'нет — домены идут напрямую')} · "
+                             f"записей: {len(g.domains)}")
         self.editor.setPlainText("\n".join(g.domains))
         self.editor.setEnabled(True)
         self.ed_save.setEnabled(True)
@@ -578,6 +896,7 @@ class MainWindow(QMainWindow):
             return
         cmds = C.with_save(cmds)
         summary = C.describe(current, target, self._ifname)
+        self._last_summary = summary
         if PreviewDialog(cmds, self, summary).exec() != QDialog.Accepted:
             self._pending_sources = []
             return
@@ -615,6 +934,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"✓ Применено и проверено · бэкап {r['backup'].name}", 8000)
             before = r["before"]
             Toast(self, "✓ Применено и проверено на роутере", "Отменить", lambda: self._rollback(before))
+            self._record("lists", getattr(self, "_last_summary", []), r["backup"])
             for group, src, excluded in self._pending_sources:
                 self.sources.add(self._router_key(), group, src, excluded)
             if self._on_success:
@@ -804,8 +1124,6 @@ class MainWindow(QMainWindow):
         theme.apply(QApplication.instance(), cfg["theme"])
         theme.dark_titlebar(self)
         refresh_icons(self)
-        self.tabs.setTabIcon(0, icon("route"))
-        self.tabs.setTabIcon(1, icon("lock"))
         self._theme_tip(cfg["theme"])
         self._loaded((self.config_lines, self.groups, self.ifaces))
 
@@ -854,15 +1172,8 @@ class MainWindow(QMainWindow):
         UpdateDialog(self, getattr(self, "_new_release", None)).exec()
 
     # ---------- DNS ----------
-    def _on_tab(self, idx):
-        """Шлюзы слева относятся только к маршрутизации — на вкладке DoT / DoH прячем."""
-        routing = idx == 0
-        for w in (self.route_cap, self.iflist):
-            w.setVisible(routing)
-        self.route_spacer.setVisible(not routing)
-
     def open_dns(self):
-        self.tabs.setCurrentWidget(self.dns_panel)
+        self.go("dns")
 
     def _dns_exec(self, add, remove, before) -> dict:
         """Применить DNS на роутере (в фоне): удаление по одной с запасными формами команды,
@@ -943,12 +1254,13 @@ class MainWindow(QMainWindow):
                         return
             else:
                 self.statusBar().showMessage(f"✓ DNS применены и проверены · бэкап {r['backup'].name}", 8000)
+                self._record("dns", summary, r["backup"], "DNS · DoT · DoH")
             self.refresh()
         run_bg(self, work, done, busy="Применяю DNS…")
 
     # ---------- политики ----------
     def open_policies(self):
-        self.tabs.setCurrentWidget(self.policy_panel)
+        self.go("policies")
 
     def apply_policy(self, macs: list[str], policy: str | None, new: P.Policy | None = None):
         devices = getattr(self, "devices", None) or P.parse_devices(self.config_lines)
@@ -987,6 +1299,7 @@ class MainWindow(QMainWindow):
                         return
             else:
                 self.statusBar().showMessage(f"✓ Политики применены и проверены · бэкап {r['backup'].name}", 8000)
+                self._record("policy", summary, r["backup"], "Политики устройств")
             self.refresh()
         run_bg(self, work, done, busy="Применяю политики…")
 
@@ -1016,8 +1329,20 @@ class MainWindow(QMainWindow):
                                     + f"\n\nБэкап до изменений: {r['backup'].name} (кнопка «Восстановить из бэкапа»).")
             else:
                 self.statusBar().showMessage(f"✓ Готово и проверено · бэкап {r['backup'].name}", 8000)
+                self._record("policy", summary, r["backup"], f"Политика «{name}»")
             self.refresh()
         run_bg(self, work, done, busy="Применяю…")
+
+    def _record(self, kind: str, lines: list[str], backup, title: str | None = None):
+        """Запись в «Историю изменений»."""
+        if title is None:
+            gw = all(x.startswith("~") and "шлюз" in x for x in lines)
+            title = ("Смена шлюза" if gw else "Добавлено из каталога" if self._pending_sources
+                     else "Изменение списков")
+        try:
+            self.history.add(self._router_key(), kind, title, lines, getattr(backup, "name", backup))
+        except Exception:  # noqa: BLE001
+            log.exception("История не записалась")
 
     def _rollback(self, before: dict[str, Group]):
         def work():
@@ -1240,8 +1565,11 @@ class MainWindow(QMainWindow):
 
     def restore_backup(self):
         path, _ = QFileDialog.getOpenFileName(self, "Бэкап", str(io.app_dir() / "backups"), "Бэкап (*.txt)")
-        if not path:
-            return
+        if path:
+            self.restore_from(path)
+
+    def restore_from(self, path):
+        """Вернуть списки и DNS-маршруты из файла бэкапа (с предпросмотром разницы)."""
         with open(path, encoding="utf-8") as f:
             backup = parse_running_config(f.read().splitlines())
         self.apply(backup)

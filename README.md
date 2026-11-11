@@ -10,8 +10,10 @@
 
 <p align="center"><img src="docs/screenshots/main.png" width="860" alt="Главное окно"></p>
 
-| Каталог сервисов | DNS / DoT / DoH |
+| Обзор | История изменений |
 |---|---|
+| <img src="docs/screenshots/overview.png" width="420"> | <img src="docs/screenshots/history.png" width="420"> |
+| **Каталог сервисов** | **DNS / DoT / DoH** |
 | <img src="docs/screenshots/catalog.png" width="420"> | <img src="docs/screenshots/dns.png" width="420"> |
 | **Сохранённые роутеры** | **Светлая тема** |
 | <img src="docs/screenshots/login.png" width="420"> | <img src="docs/screenshots/main_light.png" width="420"> |

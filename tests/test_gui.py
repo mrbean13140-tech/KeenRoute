@@ -249,8 +249,8 @@ def test_dns_dialog(app):
     assert len(w.dns) == 5
     d = w.dns_panel
     w.open_dns()
-    assert w.tabs.currentWidget() is d and d.cur.topLevelItemCount() >= 4
-    assert w.iflist.isHidden() and w.route_spacer.isVisibleTo(w.route_spacer.parentWidget())  # шлюзы скрыты на вкладке DoT / DoH
+    assert w.tabs.currentIndex() == w.page_index["dns"] and d.cur.topLevelItemCount() >= 4
+    assert w.nav_buttons["dns"].isChecked() and not w.nav_buttons["routing"].isChecked()
     for p, kind, cb in d.boxes:
         if p["id"] == "adguard-family" and kind == "dot":
             cb.setChecked(True)
@@ -490,3 +490,45 @@ def test_policy_dialog_priority(app):
     import shiboken6
     d.close()
     shiboken6.delete(d)  # окно без родителя: удалить до выхода, иначе Qt падает при завершении (код 1)
+
+
+def test_v2_pages(app):
+    """KeenRoute 2.0: меню, обзор, история, бэкапы, контекстная панель и панель деталей."""
+    fake = Fake()
+    w = mw.MainWindow(fake, {"model": "KN-1010", "title": "4.2"}, {"name": "Дом", "id": "home2"})
+    w.resize(1360, 820)
+    w.show()
+    _wait(app)
+    assert w.current_page == "routing" and w.actionbar.isHidden() and w.detail.isHidden()
+    w.table.item(0, mw.COL_CHK).setCheckState(Qt.Checked)
+    assert not w.actionbar.isHidden()
+    w.table.setCurrentCell(1, mw.COL_NAME)
+    assert not w.detail.isHidden() and w.ed_title.text() == "YT"
+    _shot(w, "main.png")
+    w._close_detail()
+    assert w.detail.isHidden()
+    w._clear_checks()
+    assert w.actionbar.isHidden()
+    # применяем — запись в истории
+    w.table.item(0, mw.COL_CHK).setCheckState(Qt.Checked)
+    w.gw.setCurrentIndex(0)
+    w.assign_selected()
+    _wait(app)
+    assert w.last_apply["ok"]
+    items = w.history.for_router("home2")
+    assert items and items[0]["kind"] == "lists" and items[0]["backup"]
+    w.go("history")
+    _wait(app)
+    assert w.hist_body.count() >= 2
+    _shot(w, "history.png")
+    w.go("backups")
+    assert w.bk_body.count() >= 2
+    w.go("overview")
+    _wait(app)
+    assert w.ov_stats[0][1].text() == "2"
+    _shot(w, "overview.png")
+    from keenetic_dns.ui import theme
+    w.toggle_theme(); w.toggle_theme()  # → светлая
+    w.go("routing")
+    _shot(w, "main_light.png")
+    w.toggle_theme()

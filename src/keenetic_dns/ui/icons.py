@@ -78,6 +78,12 @@ def _draw(name: str, p: QPainter, s: float):
         line((9, 6), (9, 18)); line((15, 6), (15, 18))
     elif name == "play":
         line((8, 5.5), (18.5, 12), (8, 18.5), (8, 5.5))
+    elif name == "grid":
+        rect(4, 4, 6.5, 6.5, 1.5); rect(13.5, 4, 6.5, 6.5, 1.5); rect(4, 13.5, 6.5, 6.5, 1.5); rect(13.5, 13.5, 6.5, 6.5, 1.5)
+    elif name == "history":
+        arc(12, 12, 8, 160, -300); line((4.3, 6.5), (4.6, 10.6), (8.6, 10.0)); line((12, 8), (12, 12), (15, 14))
+    elif name == "close":
+        line((6.5, 6.5), (17.5, 17.5)); line((17.5, 6.5), (6.5, 17.5))
     elif name == "check":
         line((5, 12.5), (10, 17), (19, 7))
 
@@ -103,7 +109,7 @@ def icon(name: str, color: str | None = None, size: int = 20) -> QIcon:
 
 
 def _color_for(kind: str | None) -> str:
-    return {"primary": "#ffffff", "danger": COL["bad"], "muted": COL["muted"]}.get(kind or "", COL["text"])
+    return {"primary": "#ffffff", "danger": COL["bad"], "muted": COL["muted"], "strong": COL["bg"]}.get(kind or "", COL["text"])
 
 
 def set_icon(btn, name: str, kind: str | None = None) -> None:

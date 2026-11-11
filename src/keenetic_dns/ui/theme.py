@@ -7,24 +7,25 @@ from pathlib import Path
 from PySide6.QtGui import QColor, QFont, QIcon, QPalette
 from PySide6.QtWidgets import QApplication
 
-DARK = {
-    "bg": "#1b1d23",        # основной фон
-    "side": "#15171c",      # сайдбар
-    "card": "#23262e",      # карточки
-    "card2": "#2a2e37",     # hover
-    "border": "#2f333d",
-    "text": "#e6e8ee",
-    "muted": "#8b92a1",
-    "accent": "#4c8dff",
-    "accent2": "#3a78ea",
-    "ok": "#3fb950",
-    "bad": "#f85149",
-    "warn": "#d29922",
+DARK = {  # KeenRoute 2.0: графит + сдержанный индиго
+    "bg": "#0f1013",        # рабочая область
+    "side": "#121318",      # боковая навигация
+    "card": "#16181d",      # панели и карточки
+    "card2": "#23272f",     # hover / выбранное
+    "border": "#2a2e37",
+    "text": "#e8e9ed",
+    "muted": "#9398a5",
+    "accent": "#6558db",
+    "accent2": "#5547c9",
+    "accentText": "#a99cff",  # акцент для текста и индикаторов на тёмном
+    "ok": "#46c35a",
+    "bad": "#f0706a",
+    "warn": "#d9a23a",
 }
 LIGHT = {
-    "bg": "#f7f8fa", "side": "#eef0f4", "card": "#ffffff", "card2": "#e8ecf3", "border": "#d8dce4",
-    "text": "#1f2329", "muted": "#6b7280", "accent": "#2f6fed", "accent2": "#255fd1",
-    "ok": "#1a7f37", "bad": "#cf222e", "warn": "#9a6700",
+    "bg": "#f7f8fa", "side": "#f1f2f5", "card": "#ffffff", "card2": "#e9ebf0", "border": "#e3e5eb",
+    "text": "#16181d", "muted": "#5d6370", "accent": "#6558db", "accent2": "#5547c9", "accentText": "#5446c9",
+    "ok": "#1a7f37", "bad": "#c42330", "warn": "#8a5a00",
 }
 C = dict(DARK)  # текущая палитра (меняется при смене темы)
 
@@ -63,8 +64,34 @@ def _make_check_png() -> str:
 
 def _qss(C) -> str:
     return f"""
-* {{ font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; font-size: 10pt; color: {C['text']}; }}
-QMainWindow, QDialog, QWidget#central {{ background: {C['bg']}; }}
+* {{ font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", sans-serif; font-size: 10pt; color: {C['text']}; }}
+QMainWindow, QDialog, QWidget#central, QStackedWidget#pages, QWidget#page {{ background: {C['bg']}; }}
+QWidget#topbar {{ background: {C['bg']}; border-bottom: 1px solid {C['border']}; }}
+QLabel#crumb {{ color: {C['muted']}; }}
+QLabel#crumbNow {{ font-weight: 600; }}
+QLabel#pill {{ color: {C['ok']}; background: transparent; border: 1px solid {C['ok']}; border-radius: 9px;
+              padding: 1px 8px; font-size: 8pt; font-weight: 600; }}
+QLabel#statValue {{ font-size: 20pt; font-weight: 650; }}
+QLabel#statNote {{ color: {C['muted']}; font-size: 9pt; }}
+QLabel#badgeAdd {{ color: {C['ok']}; border: 1px solid {C['ok']}; border-radius: 6px; padding: 2px 8px; font-weight: 600; font-size: 9pt; }}
+QLabel#badgeMod {{ color: {C['warn']}; border: 1px solid {C['warn']}; border-radius: 6px; padding: 2px 8px; font-weight: 600; font-size: 9pt; }}
+QLabel#badgeDel {{ color: {C['bad']}; border: 1px solid {C['bad']}; border-radius: 6px; padding: 2px 8px; font-weight: 600; font-size: 9pt; }}
+QLabel#badge {{ color: {C['muted']}; border: 1px solid {C['border']}; border-radius: 6px; padding: 2px 8px; font-weight: 600; font-size: 9pt; }}
+QFrame#row {{ background: transparent; border: none; border-bottom: 1px solid {C['border']}; }}
+QPushButton#navitem {{
+    background: transparent; border: none; border-radius: 8px; text-align: left; padding: 8px 10px;
+    icon-size: 17px; color: {C['muted']}; font-weight: 500;
+}}
+QPushButton#navitem:hover {{ background: {C['card']}; color: {C['text']}; }}
+QPushButton#navitem:checked {{ background: {C['card2']}; color: {C['text']}; }}
+QPushButton#routercard {{ background: {C['card']}; border: 1px solid {C['border']}; border-radius: 10px;
+                         text-align: left; padding: 9px 10px; icon-size: 18px; }}
+QPushButton#routercard:hover {{ border: 1px solid {C['accent']}; }}
+QListWidget#chips {{ background: transparent; border: none; }}
+QListWidget#chips::item {{ border: 1px solid {C['border']}; border-radius: 8px; padding: 6px 12px; margin: 0 8px 6px 0;
+                          background: {C['card']}; }}
+QListWidget#chips::item:hover {{ border: 1px solid {C['muted']}; }}
+QListWidget#chips::item:selected {{ background: {C['card2']}; border: 1px solid {C['accentText']}; color: {C['text']}; }}
 QWidget#sidebar {{ background: {C['side']}; border-right: 1px solid {C['border']}; }}
 QLabel#title {{ font-size: 16pt; font-weight: 600; }}
 QLabel#brand {{ font-size: 13pt; font-weight: 700; }}
@@ -72,9 +99,9 @@ QFrame#footer {{ border-top: 1px solid {C['border']}; }}
 QLabel#h2 {{ font-size: 11pt; font-weight: 600; }}
 QLabel#muted, QLabel#caption {{ color: {C['muted']}; }}
 QLabel#caption {{ font-size: 8.5pt; font-weight: 600; letter-spacing: 1px; }}
-QFrame#card {{ background: {C['card']}; border: 1px solid {C['border']}; border-radius: 10px; }}
-QFrame#actionbar {{ background: {C['card']}; border: 1px solid {C['border']}; border-left: 3px solid {C['accent']};
-                    border-radius: 12px; }}
+QFrame#card {{ background: {C['card']}; border: 1px solid {C['border']}; border-radius: 12px; }}
+QFrame#actionbar {{ background: {C['card2']}; border: 1px solid {C['border']}; border-radius: 12px; }}
+QWidget#detail {{ background: {C['card']}; border-left: 1px solid {C['border']}; }}
 
 QPushButton {{
     background: {C['card']}; border: 1px solid {C['border']}; border-radius: 8px;
@@ -84,6 +111,8 @@ QPushButton:hover {{ background: {C['card2']}; }}
 QPushButton:pressed {{ background: {C['border']}; }}
 QPushButton:disabled {{ color: {C['muted']}; }}
 QPushButton#primary {{ background: {C['accent']}; border: 1px solid {C['accent']}; color: white; font-weight: 600; }}
+QPushButton#strong {{ background: {C['text']}; border: 1px solid {C['text']}; color: {C['bg']}; font-weight: 600; }}
+QPushButton#link {{ background: transparent; border: none; color: {C['accentText']}; font-weight: 600; padding: 4px 6px; }}
 QPushButton#primary:hover {{ background: {C['accent2']}; }}
 QPushButton#danger {{ color: {C['bad']}; }}
 QPushButton#icon {{ background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 0; font-size: 12pt; }}
@@ -109,8 +138,8 @@ QComboBox QAbstractItemView {{
 }}
 
 QTableWidget {{
-    background: {C['bg']}; border: none; gridline-color: transparent; outline: 0;
-    alternate-background-color: {C['bg']};
+    background: {C['card']}; border: 1px solid {C['border']}; border-radius: 12px; gridline-color: transparent; outline: 0;
+    alternate-background-color: {C['card']};
 }}
 QTableWidget::item {{ padding: 6px 8px; border-bottom: 1px solid {C['border']}; }}
 QTreeWidget {{ background: {C['card']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 6px; outline: 0; }}
@@ -118,11 +147,12 @@ QTreeWidget::item {{ padding: 5px 4px; border-radius: 6px; }}
 QTreeWidget::item:hover {{ background: {C['card2']}; }}
 QTreeWidget::item:selected {{ background: {C['card2']}; color: {C['text']}; }}
 QStatusBar QLabel {{ color: {C['muted']}; }}
-QTableWidget::item:selected {{ background: {C['card2']}; color: {C['text']}; }}
+QTableWidget::item:selected {{ background: {C['card2']}; color: {C['text']}; border-bottom: 1px solid {C['border']}; }}
 QTableWidget::item:hover {{ background: {C['card']}; }}
+QHeaderView {{ background: transparent; }}
 QHeaderView::section {{
-    background: {C['bg']}; color: {C['muted']}; border: none; border-bottom: 1px solid {C['border']};
-    padding: 8px 6px; font-size: 8.5pt; font-weight: 600;
+    background: {C['card']}; color: {C['muted']}; border: none; border-bottom: 1px solid {C['border']};
+    padding: 9px 8px; font-size: 9pt; font-weight: 500;
 }}
 
 QListWidget {{ background: transparent; border: none; outline: 0; }}
