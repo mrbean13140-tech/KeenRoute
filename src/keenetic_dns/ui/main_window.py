@@ -425,8 +425,8 @@ class MainWindow(QMainWindow):
         lay.setSpacing(12)
         head, self.title, self.subtitle = self._page_head(
             "Маршрутизация DNS", "",
-            _btn("", self.import_dialog, "icon", "Импорт из файла", ic="import"),
-            _btn("", self.export_dialog, "icon", "Экспорт в файл", ic="export"),
+            _btn("Импорт", self.import_dialog, None, "Загрузить списки из файла .json или .txt", ic="import"),
+            _btn("Экспорт", self.export_dialog, None, "Сохранить отмеченные (или все) списки в файл", ic="export"),
             _btn("Из каталога", self.open_catalog, None, "Шаблоны и база из 1500+ сервисов", ic="catalog"),
             _btn("Новый список", self.new_group, "strong", ic="plus"))
         lay.addLayout(head)
