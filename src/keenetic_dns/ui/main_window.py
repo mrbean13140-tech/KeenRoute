@@ -87,7 +87,7 @@ class MainWindow(QMainWindow):
 
     # ---------- построение UI (KeenRoute 2.0: меню слева, страницы справа) ----------
     PAGES = [("overview", "Обзор", "grid"), ("routing", "Маршрутизация", "route"),
-             ("catalog", "Каталог сервисов", "catalog"), ("dns", "DNS · DoT · DoH", "lock"),
+             ("dns", "DNS · DoT · DoH", "lock"),
              ("policies", "Политики", "monitor"), ("history", "История изменений", "history"),
              ("backups", "Резервные копии", "save")]
 
@@ -152,7 +152,7 @@ class MainWindow(QMainWindow):
         lay.addLayout(head)
 
         self.nav_buttons = {}
-        groups = [("РАБОТА", self.PAGES[:5]), ("УПРАВЛЕНИЕ", self.PAGES[5:])]
+        groups = [("РАБОТА", self.PAGES[:4]), ("УПРАВЛЕНИЕ", self.PAGES[4:])]
         for caption, items in groups:
             cap = _label(caption, "caption")
             cap.setContentsMargins(10, 12, 0, 4)
@@ -160,7 +160,7 @@ class MainWindow(QMainWindow):
             for key, text, ic_name in items:
                 b = QPushButton(text, objectName="navitem")
                 set_icon(b, ic_name, "muted")
-                b.setCheckable(key != "catalog")
+                b.setCheckable(True)
                 b.setCursor(Qt.PointingHandCursor)
                 b.clicked.connect(lambda _=False, k=key: self.go(k))
                 self.nav_buttons[key] = b
